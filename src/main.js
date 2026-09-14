@@ -9,7 +9,7 @@ import ConfirmationService from 'primevue/confirmationservice';
 import ToastService from 'primevue/toastservice';
 
 // Importación de CSS (Importante para PrimeIcons y Sakai)
-import './assets/styles.scss';
+import './assets/styles.css';
 
 // Componentes de PrimeVue
 import 'primeflex/primeflex.css';
