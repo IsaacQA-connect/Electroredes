@@ -1,0 +1,58 @@
+@import "tailwindcss";
+@import 'primeicons/primeicons.css';
+@import 'primeflex/primeflex.css';
+
+/* =========================================================
+   TEXTOS Y CONTRASTE PARA TABLAS (DataTable)
+   ========================================================= */
+
+/* 1. MODO CLARO: Texto negro/carbón intenso (#0F172A) */
+.p-datatable {
+    color: #0f172a !important;
+}
+
+/* Encabezados de la tabla (th) */
+.p-datatable .p-datatable-thead > tr > th {
+    color: #0f172a !important;
+    font-weight: 800 !important;
+    background-color: #f1f5f9 !important; /* Fondo gris claro suave */
+}
+
+/* Celdas del cuerpo de la tabla (td) */
+.p-datatable .p-datatable-tbody > tr > td {
+    color: #0f172a !important;
+    font-weight: 600 !important;
+}
+
+/* Textos informativos de la paginación y pie de tabla */
+.p-datatable .p-paginator,
+.p-datatable .p-datatable-footer,
+.p-datatable .p-datatable-loading-icon {
+    color: #0f172a !important;
+    font-weight: 600 !important;
+}
+
+
+/* 2. MODO OSCURO: Texto blanco puro (#FFFFFF) */
+html.app-dark .p-datatable {
+    color: #ffffff !important;
+}
+
+/* Encabezados en modo oscuro */
+html.app-dark .p-datatable .p-datatable-thead > tr > th {
+    color: #ffffff !important;
+    font-weight: 800 !important;
+    background-color: #1e293b !important; /* Fondo azul/slate oscuro */
+}
+
+/* Celdas en modo oscuro */
+html.app-dark .p-datatable .p-datatable-tbody > tr > td {
+    color: #f8fafc !important;
+    font-weight: 500 !important;
+}
+
+/* Paginación en modo oscuro */
+html.app-dark .p-datatable .p-paginator {
+    color: #ffffff !important;
+    background-color: #1e293b !important;
+}
