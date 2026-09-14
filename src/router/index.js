@@ -1,146 +1,144 @@
-import AppLayout from '@/layout/AppLayout.vue';
+import AppLayout from '@/layout/AppLayout.vue'; // Layout del Panel Admin
 import { createRouter, createWebHistory } from 'vue-router';
+// Importa tu layout público si tienes uno (ej. ShopLayout), si no, puedes cargarlo dinámicamente
 
 const router = createRouter({
     history: createWebHistory(),
     routes: [
+        /*
+        |--------------------------------------------------------------------------
+        | Rutas Públicas / E-Commerce
+        |--------------------------------------------------------------------------
+        */
         {
             path: '/',
+            name: 'catalog',
+            component: () => import('@/views/public/Catalog.vue')
+        },
+        {
+            path: '/checkout',
+            name: 'checkout',
+            component: () => import('@/views/public/Checkout.vue'),
+            meta: { requiresAuth: true } // El checkout requiere sesión iniciada
+        },
+        {
+        path: '/cart',
+        name: 'cart',
+        component: () => import('@/views/CartView.vue')
+        },
+        {
+        path: '/my-orders',
+        name: 'my-orders',
+        component: () => import('@/views/OrdersView.vue'),
+        meta: { requiresAuth: true }
+        },
+
+        /*
+        |--------------------------------------------------------------------------
+        | Rutas de Autenticación
+        |--------------------------------------------------------------------------
+        */
+        {
+            path: '/auth/login',
+            name: 'login',
+            component: () => import('@/views/pages/auth/Login.vue'),
+            meta: { requiresGuest: true }
+        },
+        {
+            path: '/auth/register',
+            name: 'register',
+            component: () => import('@/views//pages/auth/RegisterView.vue'),
+            meta: { requiresGuest: true }
+        },
+
+        /*
+        |--------------------------------------------------------------------------
+        | Rutas Protegidas (Panel Administrativo / POS)
+        |--------------------------------------------------------------------------
+        */
+        {
+            path: '/admin',
             component: AppLayout,
+            meta: { 
+                requiresAuth: true, 
+                requiresRole: ['ADMIN', 'ADMINISTRADOR', 'VENDEDOR'],
+                hideNavbar: true
+            },
             children: [
                 {
-                    path: '/',
+                    path: '',
+                    redirect: { name: 'dashboard' }
+                },
+                {
+                    path: 'dashboard',
                     name: 'dashboard',
                     component: () => import('@/views/Dashboard.vue')
                 },
                 {
-                    path: '/uikit/formlayout',
-                    name: 'formlayout',
-                    component: () => import('@/views/uikit/FormLayout.vue')
+                    path: 'products',
+                    name: 'admin-products',
+                    component: () => import('@/views/admin/Products.vue')
                 },
                 {
-                    path: '/uikit/input',
-                    name: 'input',
-                    component: () => import('@/views/uikit/InputDoc.vue')
+                    path: 'orders',
+                    name: 'admin-orders',
+                    component: () => import('@/views/admin/Orders.vue')
                 },
                 {
-                    path: '/uikit/button',
-                    name: 'button',
-                    component: () => import('@/views/uikit/ButtonDoc.vue')
-                },
-                {
-                    path: '/uikit/table',
-                    name: 'table',
-                    component: () => import('@/views/uikit/TableDoc.vue')
-                },
-                {
-                    path: '/uikit/list',
-                    name: 'list',
-                    component: () => import('@/views/uikit/ListDoc.vue')
-                },
-                {
-                    path: '/uikit/tree',
-                    name: 'tree',
-                    component: () => import('@/views/uikit/TreeDoc.vue')
-                },
-                {
-                    path: '/uikit/panel',
-                    name: 'panel',
-                    component: () => import('@/views/uikit/PanelsDoc.vue')
-                },
-
-                {
-                    path: '/uikit/overlay',
-                    name: 'overlay',
-                    component: () => import('@/views/uikit/OverlayDoc.vue')
-                },
-                {
-                    path: '/uikit/media',
-                    name: 'media',
-                    component: () => import('@/views/uikit/MediaDoc.vue')
-                },
-                {
-                    path: '/uikit/message',
-                    name: 'message',
-                    component: () => import('@/views/uikit/MessagesDoc.vue')
-                },
-                {
-                    path: '/uikit/file',
-                    name: 'file',
-                    component: () => import('@/views/uikit/FileDoc.vue')
-                },
-                {
-                    path: '/uikit/menu',
-                    name: 'menu',
-                    component: () => import('@/views/uikit/MenuDoc.vue')
-                },
-                {
-                    path: '/uikit/charts',
-                    name: 'charts',
-                    component: () => import('@/views/uikit/ChartDoc.vue')
-                },
-                {
-                    path: '/uikit/misc',
-                    name: 'misc',
-                    component: () => import('@/views/uikit/MiscDoc.vue')
-                },
-                {
-                    path: '/uikit/timeline',
-                    name: 'timeline',
-                    component: () => import('@/views/uikit/TimelineDoc.vue')
-                },
-                {
-                    path: '/blocks/free',
-                    name: 'blocks',
-                    meta: {
-                        breadcrumb: ['Prime Blocks', 'Free Blocks']
-                    },
-                    component: () => import('@/views/utilities/Blocks.vue')
-                },
-                {
-                    path: '/pages/empty',
-                    name: 'empty',
-                    component: () => import('@/views/pages/Empty.vue')
-                },
-                {
-                    path: '/pages/crud',
-                    name: 'crud',
-                    component: () => import('@/views/pages/Crud.vue')
-                },
-                {
-                    path: '/start/documentation',
-                    name: 'documentation',
-                    component: () => import('@/views/pages/Documentation.vue')
+                    path: 'cash-register',
+                    name: 'admin-cash-register',
+                    component: () => import('@/views/admin/CashRegister.vue')
                 }
             ]
         },
-        {
-            path: '/landing',
-            name: 'landing',
-            component: () => import('@/views/pages/Landing.vue')
-        },
-        {
-            path: '/pages/notfound',
-            name: 'notfound',
-            component: () => import('@/views/pages/NotFound.vue')
-        },
 
+        /*
+        |--------------------------------------------------------------------------
+        | Redirección 404
+        |--------------------------------------------------------------------------
+        */
         {
-            path: '/auth/login',
-            name: 'login',
-            component: () => import('@/views/pages/auth/Login.vue')
-        },
-        {
-            path: '/auth/access',
-            name: 'accessDenied',
-            component: () => import('@/views/pages/auth/Access.vue')
-        },
-        {
-            path: '/auth/error',
-            name: 'error',
-            component: () => import('@/views/pages/auth/Error.vue')
+            path: '/:pathMatch(.*)*',
+            redirect: '/'
         }
     ]
+});
+
+/*
+|--------------------------------------------------------------------------
+| Guardián de Navegación (Middleware)
+|--------------------------------------------------------------------------
+*/
+router.beforeEach((to, from, next) => {
+    const token = localStorage.getItem('token');
+    // Normalizamos a mayúsculas para evitar fallos por "admin" vs "ADMINISTRADOR"
+    const userRole = (localStorage.getItem('user_role') || '').toUpperCase();
+
+    // 1. Sin Token -> Al Login
+    if (to.meta.requiresAuth && !token) {
+        return next({ name: 'login' });
+    }
+
+    // 2. Usuario ya logueado en rutas de invitados (Login/Register)
+    if (to.meta.requiresGuest && token) {
+        return ['ADMINISTRADOR', 'VENDEDOR', 'ADMIN'].includes(userRole) 
+            ? next({ name: 'dashboard' }) 
+            : next({ name: 'catalog' });
+    }
+
+    // 3. Control de Roles para Admin
+    if (to.meta.requiresRole) {
+        const allowedRoles = to.meta.requiresRole.map(r => r.toUpperCase());
+        // Permite la entrada si el rol coincide o si es 'ADMIN'
+        const hasPermission = allowedRoles.includes(userRole) || userRole === 'ADMIN';
+
+        if (!hasPermission) {
+            console.warn(`Acceso denegado. Rol actual: "${userRole}", requeridos:`, allowedRoles);
+            return next({ name: 'catalog' });
+        }
+    }
+
+    next();
 });
 
 export default router;

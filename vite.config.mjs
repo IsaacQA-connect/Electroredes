@@ -29,5 +29,12 @@ export default defineConfig({
                 api: 'modern-compiler'
             }
         }
+    },
+    // ➡️ ESTA ES LA SECCIÓN QUE LE FALTA PARA HOSTINGER:
+    preview: {
+        // Lee el puerto dinámico que Hostinger te asigne en producción
+        port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
+        host: true,         // Permite conexiones externas hacia el contenedor
+        allowedHosts: true  // Evita el error "Invalid Host Header" en la nube
     }
 });
