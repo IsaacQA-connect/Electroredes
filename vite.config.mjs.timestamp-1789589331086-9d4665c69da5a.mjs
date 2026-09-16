@@ -1,0 +1,45 @@
+// vite.config.mjs
+import { fileURLToPath, URL } from "node:url";
+import { PrimeVueResolver } from "file:///C:/Users/franc/Downloads/QUISPE%20ARIAS%20ISAAC%20NEWTON/electroredes/ELECTROREDES/electroredes_frontend/electroredes/node_modules/@primevue/auto-import-resolver/index.mjs";
+import tailwindcss from "file:///C:/Users/franc/Downloads/QUISPE%20ARIAS%20ISAAC%20NEWTON/electroredes/ELECTROREDES/electroredes_frontend/electroredes/node_modules/@tailwindcss/vite/dist/index.mjs";
+import vue from "file:///C:/Users/franc/Downloads/QUISPE%20ARIAS%20ISAAC%20NEWTON/electroredes/ELECTROREDES/electroredes_frontend/electroredes/node_modules/@vitejs/plugin-vue/dist/index.mjs";
+import Components from "file:///C:/Users/franc/Downloads/QUISPE%20ARIAS%20ISAAC%20NEWTON/electroredes/ELECTROREDES/electroredes_frontend/electroredes/node_modules/unplugin-vue-components/dist/vite.js";
+import { defineConfig } from "file:///C:/Users/franc/Downloads/QUISPE%20ARIAS%20ISAAC%20NEWTON/electroredes/ELECTROREDES/electroredes_frontend/electroredes/node_modules/vite/dist/node/index.js";
+var __vite_injected_original_import_meta_url = "file:///C:/Users/franc/Downloads/QUISPE%20ARIAS%20ISAAC%20NEWTON/electroredes/ELECTROREDES/electroredes_frontend/electroredes/vite.config.mjs";
+var vite_config_default = defineConfig({
+  optimizeDeps: {
+    noDiscovery: true
+  },
+  plugins: [
+    vue(),
+    tailwindcss(),
+    Components({
+      resolvers: [PrimeVueResolver()]
+    })
+  ],
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", __vite_injected_original_import_meta_url))
+    }
+  },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        api: "modern-compiler"
+      }
+    }
+  },
+  // ➡️ ESTA ES LA SECCIÓN QUE LE FALTA PARA HOSTINGER:
+  preview: {
+    // Lee el puerto dinámico que Hostinger te asigne en producción
+    port: process.env.PORT ? parseInt(process.env.PORT) : 3e3,
+    host: true,
+    // Permite conexiones externas hacia el contenedor
+    allowedHosts: true
+    // Evita el error "Invalid Host Header" en la nube
+  }
+});
+export {
+  vite_config_default as default
+};
+//# sourceMappingURL=data:application/json;base64,ewogICJ2ZXJzaW9uIjogMywKICAic291cmNlcyI6IFsidml0ZS5jb25maWcubWpzIl0sCiAgInNvdXJjZXNDb250ZW50IjogWyJjb25zdCBfX3ZpdGVfaW5qZWN0ZWRfb3JpZ2luYWxfZGlybmFtZSA9IFwiQzpcXFxcVXNlcnNcXFxcZnJhbmNcXFxcRG93bmxvYWRzXFxcXFFVSVNQRSBBUklBUyBJU0FBQyBORVdUT05cXFxcZWxlY3Ryb3JlZGVzXFxcXEVMRUNUUk9SRURFU1xcXFxlbGVjdHJvcmVkZXNfZnJvbnRlbmRcXFxcZWxlY3Ryb3JlZGVzXCI7Y29uc3QgX192aXRlX2luamVjdGVkX29yaWdpbmFsX2ZpbGVuYW1lID0gXCJDOlxcXFxVc2Vyc1xcXFxmcmFuY1xcXFxEb3dubG9hZHNcXFxcUVVJU1BFIEFSSUFTIElTQUFDIE5FV1RPTlxcXFxlbGVjdHJvcmVkZXNcXFxcRUxFQ1RST1JFREVTXFxcXGVsZWN0cm9yZWRlc19mcm9udGVuZFxcXFxlbGVjdHJvcmVkZXNcXFxcdml0ZS5jb25maWcubWpzXCI7Y29uc3QgX192aXRlX2luamVjdGVkX29yaWdpbmFsX2ltcG9ydF9tZXRhX3VybCA9IFwiZmlsZTovLy9DOi9Vc2Vycy9mcmFuYy9Eb3dubG9hZHMvUVVJU1BFJTIwQVJJQVMlMjBJU0FBQyUyME5FV1RPTi9lbGVjdHJvcmVkZXMvRUxFQ1RST1JFREVTL2VsZWN0cm9yZWRlc19mcm9udGVuZC9lbGVjdHJvcmVkZXMvdml0ZS5jb25maWcubWpzXCI7aW1wb3J0IHsgZmlsZVVSTFRvUGF0aCwgVVJMIH0gZnJvbSAnbm9kZTp1cmwnO1xyXG5cclxuaW1wb3J0IHsgUHJpbWVWdWVSZXNvbHZlciB9IGZyb20gJ0BwcmltZXZ1ZS9hdXRvLWltcG9ydC1yZXNvbHZlcic7XHJcbmltcG9ydCB0YWlsd2luZGNzcyBmcm9tICdAdGFpbHdpbmRjc3Mvdml0ZSc7XHJcbmltcG9ydCB2dWUgZnJvbSAnQHZpdGVqcy9wbHVnaW4tdnVlJztcclxuaW1wb3J0IENvbXBvbmVudHMgZnJvbSAndW5wbHVnaW4tdnVlLWNvbXBvbmVudHMvdml0ZSc7XHJcbmltcG9ydCB7IGRlZmluZUNvbmZpZyB9IGZyb20gJ3ZpdGUnO1xyXG5cclxuLy8gaHR0cHM6Ly92aXRlanMuZGV2L2NvbmZpZy9cclxuZXhwb3J0IGRlZmF1bHQgZGVmaW5lQ29uZmlnKHtcclxuICAgIG9wdGltaXplRGVwczoge1xyXG4gICAgICAgIG5vRGlzY292ZXJ5OiB0cnVlXHJcbiAgICB9LFxyXG4gICAgcGx1Z2luczogW1xyXG4gICAgICAgIHZ1ZSgpLFxyXG4gICAgICAgIHRhaWx3aW5kY3NzKCksXHJcbiAgICAgICAgQ29tcG9uZW50cyh7XHJcbiAgICAgICAgICAgIHJlc29sdmVyczogW1ByaW1lVnVlUmVzb2x2ZXIoKV1cclxuICAgICAgICB9KVxyXG4gICAgXSxcclxuICAgIHJlc29sdmU6IHtcclxuICAgICAgICBhbGlhczoge1xyXG4gICAgICAgICAgICAnQCc6IGZpbGVVUkxUb1BhdGgobmV3IFVSTCgnLi9zcmMnLCBpbXBvcnQubWV0YS51cmwpKVxyXG4gICAgICAgIH1cclxuICAgIH0sXHJcbiAgICBjc3M6IHtcclxuICAgICAgICBwcmVwcm9jZXNzb3JPcHRpb25zOiB7XHJcbiAgICAgICAgICAgIHNjc3M6IHtcclxuICAgICAgICAgICAgICAgIGFwaTogJ21vZGVybi1jb21waWxlcidcclxuICAgICAgICAgICAgfVxyXG4gICAgICAgIH1cclxuICAgIH0sXHJcbiAgICAvLyBcdTI3QTFcdUZFMEYgRVNUQSBFUyBMQSBTRUNDSVx1MDBEM04gUVVFIExFIEZBTFRBIFBBUkEgSE9TVElOR0VSOlxyXG4gICAgcHJldmlldzoge1xyXG4gICAgICAgIC8vIExlZSBlbCBwdWVydG8gZGluXHUwMEUxbWljbyBxdWUgSG9zdGluZ2VyIHRlIGFzaWduZSBlbiBwcm9kdWNjaVx1MDBGM25cclxuICAgICAgICBwb3J0OiBwcm9jZXNzLmVudi5QT1JUID8gcGFyc2VJbnQocHJvY2Vzcy5lbnYuUE9SVCkgOiAzMDAwLFxyXG4gICAgICAgIGhvc3Q6IHRydWUsICAgICAgICAgLy8gUGVybWl0ZSBjb25leGlvbmVzIGV4dGVybmFzIGhhY2lhIGVsIGNvbnRlbmVkb3JcclxuICAgICAgICBhbGxvd2VkSG9zdHM6IHRydWUgIC8vIEV2aXRhIGVsIGVycm9yIFwiSW52YWxpZCBIb3N0IEhlYWRlclwiIGVuIGxhIG51YmVcclxuICAgIH1cclxufSk7XHJcbiJdLAogICJtYXBwaW5ncyI6ICI7QUFBeWhCLFNBQVMsZUFBZSxXQUFXO0FBRTVqQixTQUFTLHdCQUF3QjtBQUNqQyxPQUFPLGlCQUFpQjtBQUN4QixPQUFPLFNBQVM7QUFDaEIsT0FBTyxnQkFBZ0I7QUFDdkIsU0FBUyxvQkFBb0I7QUFOMlQsSUFBTSwyQ0FBMkM7QUFTelksSUFBTyxzQkFBUSxhQUFhO0FBQUEsRUFDeEIsY0FBYztBQUFBLElBQ1YsYUFBYTtBQUFBLEVBQ2pCO0FBQUEsRUFDQSxTQUFTO0FBQUEsSUFDTCxJQUFJO0FBQUEsSUFDSixZQUFZO0FBQUEsSUFDWixXQUFXO0FBQUEsTUFDUCxXQUFXLENBQUMsaUJBQWlCLENBQUM7QUFBQSxJQUNsQyxDQUFDO0FBQUEsRUFDTDtBQUFBLEVBQ0EsU0FBUztBQUFBLElBQ0wsT0FBTztBQUFBLE1BQ0gsS0FBSyxjQUFjLElBQUksSUFBSSxTQUFTLHdDQUFlLENBQUM7QUFBQSxJQUN4RDtBQUFBLEVBQ0o7QUFBQSxFQUNBLEtBQUs7QUFBQSxJQUNELHFCQUFxQjtBQUFBLE1BQ2pCLE1BQU07QUFBQSxRQUNGLEtBQUs7QUFBQSxNQUNUO0FBQUEsSUFDSjtBQUFBLEVBQ0o7QUFBQTtBQUFBLEVBRUEsU0FBUztBQUFBO0FBQUEsSUFFTCxNQUFNLFFBQVEsSUFBSSxPQUFPLFNBQVMsUUFBUSxJQUFJLElBQUksSUFBSTtBQUFBLElBQ3RELE1BQU07QUFBQTtBQUFBLElBQ04sY0FBYztBQUFBO0FBQUEsRUFDbEI7QUFDSixDQUFDOyIsCiAgIm5hbWVzIjogW10KfQo=
