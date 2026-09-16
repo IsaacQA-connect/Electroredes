@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: 'http://electroredes-api.test/api/v1', // Tu backend Laravel
+    baseURL: 'http://electroredes-api.test/api/v1'  || import.meta.env.VITE_API_BASE_URL || 'https://apielectroredes.soportecenter.com/api/v1', // Tu backend Laravel
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
