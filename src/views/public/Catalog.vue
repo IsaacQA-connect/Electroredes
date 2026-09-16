@@ -3,14 +3,18 @@ import api from '@/service/api';
 import { useAuthStore } from '@/stores/auth';
 import { useCartStore } from '@/stores/cart';
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import Button from 'primevue/button';
 import Select from 'primevue/select';
+import Toast from 'primevue/toast';
+import { useToast } from 'primevue/usetoast';
 
 const route = useRoute();
+const router = useRouter();
 const cart = useCartStore();
 const auth = useAuthStore();
+const toast = useToast();
 
 const products = ref([]);
 const categories = ref([]);
@@ -25,7 +29,6 @@ const sortOptions = [
     { label: 'Precio: Mayor a Menor', value: 'price-desc' }
 ];
 
-// Cargar catálogo contemplando la URL de búsqueda y la categoría
 const fetchCatalogData = async () => {
     loading.value = true;
     try {
@@ -48,18 +51,15 @@ const fetchCatalogData = async () => {
     }
 };
 
-// Filtrar por categoría
 const filterByCategory = (catId) => {
     selectedCategory.value = catId;
     fetchCatalogData();
 };
 
-// Reactividad: Si el usuario busca algo desde el Navbar corporativo
 watch(() => route.query.search, () => {
     fetchCatalogData();
 });
 
-// Ordenamiento local
 const filteredProducts = computed(() => {
     let list = [...products.value];
 
@@ -77,11 +77,30 @@ const filteredProducts = computed(() => {
 
 onMounted(() => {
     fetchCatalogData();
+
+    // Capturar si retorna desde Mercado Pago con pago exitoso
+    const paymentStatus = route.query.payment || route.query.collection_status || route.query.status;
+    const orderId = route.query.order_id || route.query.external_reference;
+
+    if (paymentStatus === 'success' || paymentStatus === 'approved') {
+        toast.add({
+            severity: 'success',
+            summary: '¡Pago Confirmado!',
+            detail: orderId ? `Tu orden #${orderId} se completó con éxito.` : 'Tu compra fue procesada correctamente.',
+            life: 5000
+        });
+
+        // Limpiar los parámetros de la URL sin recargar la página
+        router.replace({ query: {} });
+    }
 });
 </script>
 
 <template>
     <div class="min-h-screen surface-ground py-4">
+        <!-- Notificación Flotante -->
+        <Toast />
+
         <div class="mx-auto px-4" style="max-width: 1200px;">
             <div class="grid">
                 <!-- Sidebar Categorías -->

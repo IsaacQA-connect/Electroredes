@@ -31,7 +31,7 @@ const form = reactive({
     name: '',
     code: '',
     category_id: null,
-    price: 0,
+    sale_price: 0,
     stock: 0,
     description: '',
     image_url: ''
@@ -57,7 +57,7 @@ const fetchProducts = async () => {
 };
 
 const openNew = () => {
-    Object.assign(form, { id: null, name: '', code: '', category_id: null, price: 0, stock: 0, description: '', image_url: '' });
+    Object.assign(form, { id: null, name: '', code: '', category_id: null, sale_price: 0, stock: 0, description: '', image_url: '' });
     Object.keys(errors).forEach(k => errors[k] = '');
     productDialog.value = true;
 };
@@ -68,7 +68,7 @@ const editProduct = (prod) => {
         name: prod.name,
         code: prod.code || '',
         category_id: prod.category_id || prod.category?.id,
-        price: Number(prod.price),
+        sale_price: Number(prod.sale_price),
         stock: prod.stock || 0,
         description: prod.description || '',
         image_url: prod.image_url || ''
@@ -82,7 +82,7 @@ const validate = () => {
     let valid = true;
     if (!form.name.trim()) { errors.name = 'El nombre es obligatorio'; valid = false; }
     if (!form.category_id) { errors.category_id = 'Selecciona una categoría'; valid = false; }
-    if (form.price <= 0) { errors.price = 'El precio debe ser mayor a 0'; valid = false; }
+    if (form.sale_price <= 0) { errors.sale_price = 'El precio debe ser mayor a 0'; valid = false; }
     return valid;
 };
 
@@ -164,9 +164,9 @@ onMounted(() => {
                     </template>
                 </Column>
 
-                <Column field="price" header="Precio">
+                <Column field="sale_price" header="Precio">
                     <template #body="slotProps">
-                        <span class="font-bold text-900">S/ {{ Number(slotProps.data.price).toFixed(2) }}</span>
+                        <span class="font-bold text-900">S/ {{ Number(slotProps.data.sale_price).toFixed(2) }}</span>
                     </template>
                 </Column>
 
@@ -218,7 +218,7 @@ onMounted(() => {
             <div class="grid">
                 <div class="col-6 field mb-3">
                     <label class="font-bold text-xs text-700 uppercase">Precio (S/)</label>
-                    <InputNumber v-model="form.price" mode="currency" currency="PEN" locale="es-PE" :invalid="!!errors.price" />
+                    <InputNumber v-model="form.sale_price" mode="currency" currency="PEN" locale="es-PE" :invalid="!!errors.sale_price" />
                 </div>
                 <div class="col-6 field mb-3">
                     <label class="font-bold text-xs text-700 uppercase">Stock</label>

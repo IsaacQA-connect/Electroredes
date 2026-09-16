@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router';
 
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
@@ -19,16 +20,15 @@ const loading = ref(false);
 // Formulario local
 const shippingAddress = ref('');
 const deliveryNotes = ref('');
-const paymentMethod = ref('BANK_TRANSFER');
+const paymentMethod = ref('ONLINE_PAYMENT');
 const transactionCode = ref('');
-
 
 // Métodos de Pago disponibles
 const paymentOptions = [
     { label: 'Transferencia Bancaria / CCI', value: 'BANK_TRANSFER' },
     { label: 'Yape / Plin', value: 'Yape/Plin' },
     { label: 'Pago en Efectivo', value: 'CASH' },
-    { label: 'Pago en Línea / Tarjeta', value: 'ONLINE_PAYMENT' }
+    { label: 'Pago en Línea / Tarjeta (Pasarela)', value: 'ONLINE_PAYMENT' }
 ];
 
 // Totales
@@ -47,44 +47,71 @@ const processOrder = async () => {
 
     loading.value = true;
 
-    // 1. Construir payload estricto para StoreOrderRequest
+    // 1. Construir la estructura exigida por Laravel
     const payload = {
         channel: 'WEB',
         notes: `Dirección: ${shippingAddress.value.trim()}` + (deliveryNotes.value ? ` | Notas: ${deliveryNotes.value.trim()}` : ''),
         details: cart.items.map(item => ({
             product_id: item.id,
-            quantity: Number(item.quantity)
+            quantity: Number(item.quantity),
+            unit_price: Number(item.sale_price || item.price || 0) // <-- ESTA LÍNEA ES OBLIGATORIA
         })),
         payments: [
             {
                 method: paymentMethod.value,
                 amount: Number(total.value.toFixed(2)),
-                transaction_code: transactionCode.value.trim() || null
+                transaction_code: paymentMethod.value === 'ONLINE_PAYMENT' ? null : (transactionCode.value.trim() || null)
             }
         ]
     };
 
     try {
+        // 2. Crear la orden en la base de datos
         const response = await api.post('/orders', payload);
-        
-        toast.add({ 
-            severity: 'success', 
-            summary: '¡Pedido Realizado!', 
-            detail: response.data.message || 'Tu orden ha sido registrada con éxito.', 
-            life: 4000 
-        });
+        const createdOrder = response.data.order || response.data.data || response.data;
+        const orderId = createdOrder.id;
 
-        // Vaciar carrito y redirigir
+        // 3. Redirección a Mercado Pago en caso de cobro en línea
+        if (paymentMethod.value === 'ONLINE_PAYMENT') {
+            const prefResponse = await api.post('/payments/create-preference', { 
+                order_id: orderId 
+            });
+
+            const checkoutUrl = prefResponse.data.init_point;
+
+            cart.clearCart();
+
+            if (checkoutUrl) {
+                window.location.href = checkoutUrl;
+                return;
+            } else {
+                throw new Error('No se pudo obtener el enlace de pago de Mercado Pago.');
+            }
+        }
+
+        // 4. Finalización para pagos manuales
+        toast.add({ severity: 'success', summary: '¡Pedido Realizado!', detail: 'Tu orden fue registrada correctamente.', life: 4000 });
         cart.clearCart();
-        
-        setTimeout(() => {
-            router.push('/catalog');
-        }, 2000);
+        setTimeout(() => router.push('/catalog'), 2000);
 
     } catch (err) {
-        console.error('Error al procesar orden:', err);
-        const errorMsg = err.response?.data?.message || 'Ocurrió un error al registrar el pedido.';
-        toast.add({ severity: 'error', summary: 'Error de Procesamiento', detail: errorMsg, life: 4000 });
+        console.error('Error al procesar pedido:', err);
+        const responseData = err.response?.data;
+        let errorMsg = responseData?.message || err.message || 'Error al procesar el pedido.';
+
+        if (responseData?.details) {
+            const detailStr = typeof responseData.details === 'object' 
+                ? JSON.stringify(responseData.details) 
+                : responseData.details;
+            errorMsg += ` - ${detailStr}`;
+        }
+
+        toast.add({ 
+            severity: 'error', 
+            summary: 'Error de Procesamiento', 
+            detail: errorMsg, 
+            life: 6000 
+        });
     } finally {
         loading.value = false;
     }
@@ -148,7 +175,8 @@ const processOrder = async () => {
                             />
                         </div>
 
-                        <div class="field mb-3">
+                        <!-- Oculto si se selecciona Pago en Línea -->
+                        <div v-if="paymentMethod !== 'ONLINE_PAYMENT'" class="field mb-3">
                             <label class="font-bold text-700 block mb-2">N° de Operación / Transacción</label>
                             <InputText 
                                 v-model="transactionCode" 
@@ -156,6 +184,11 @@ const processOrder = async () => {
                                 class="w-full"
                             />
                             <small class="text-500 block mt-1">Si ya realizaste la transferencia o pago móvil, ingresa el código del comprobante.</small>
+                        </div>
+
+                        <div v-else class="p-3 border-round bg-blue-50 text-blue-800 text-sm flex align-items-center gap-2 mb-3">
+                            <i class="pi pi-credit-card text-lg"></i>
+                            <span>Serás redirigido al formulario seguro de la pasarela para ingresar los datos de tu tarjeta.</span>
                         </div>
                     </div>
                 </div>
@@ -188,8 +221,8 @@ const processOrder = async () => {
                         </div>
 
                         <Button 
-                            label="Confirmar y Pagar" 
-                            icon="pi pi-check" 
+                            :label="paymentMethod === 'ONLINE_PAYMENT' ? 'Ir a Pagar' : 'Confirmar Pedido'" 
+                            :icon="paymentMethod === 'ONLINE_PAYMENT' ? 'pi pi-credit-card' : 'pi pi-check'" 
                             :loading="loading"
                             class="w-full border-round-3xl border-none py-3 mt-4 font-bold text-lg shadow-2"
                             style="background-color: #D8AC67; color: #1A1D20;"
