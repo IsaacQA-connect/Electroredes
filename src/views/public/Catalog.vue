@@ -75,35 +75,53 @@ const filteredProducts = computed(() => {
     return list;
 });
 
-onMounted(() => {
-    fetchCatalogData();
+onMounted(async () => {
+    if (typeof fetchCatalogData === 'function') {
+        fetchCatalogData();
+    }
 
-    // 1. Convertir a String por si Vue Router lo recibe como Array de parámetros duplicados
-    const rawStatus = Array.isArray(route.query.collection_status) 
-        ? route.query.collection_status[0] 
+    // 1. Extraer correctamente los parámetros aunque vengan en Array
+    const paymentId = Array.isArray(route.query.payment_id) 
+        ? route.query.payment_id[0] 
+        : route.query.payment_id;
+
+    const rawStatus = Array.isArray(route.query.status) 
+        ? route.query.status[0] 
         : (route.query.collection_status || route.query.status);
 
-    const statusString = Array.isArray(rawStatus) ? rawStatus.join(',') : String(rawStatus || '');
-    
-    const orderId = Array.isArray(route.query.external_reference)
-        ? route.query.external_reference[0]
+    const orderId = Array.isArray(route.query.external_reference) 
+        ? route.query.external_reference[0] 
         : (route.query.external_reference || route.query.order_id);
 
-    // 2. Verificar si el estado contiene 'approved' o 'success'
-    if (statusString.includes('approved') || statusString.includes('success')) {
-        toast.add({
-            severity: 'success',
-            summary: '¡Pago Confirmado!',
-            detail: orderId ? `Tu orden #${orderId} se completó con éxito.` : 'Tu compra fue procesada correctamente.',
-            life: 6000
-        });
+    const statusString = String(rawStatus || '').toLowerCase();
 
-        // 3. Vaciar el carrito de compras local
-        // cartStore.clearCart(); 
-        localStorage.removeItem('cart');
+    // 2. Verificar si el pago fue aprobado
+    if (paymentId && (statusString === 'approved' || statusString === 'success')) {
+        try {
+            // A) Forzar actualización directa en la Base de Datos desde el cliente
+            await api.post('/payments/confirm', {
+                order_id: orderId,
+                payment_id: paymentId,
+                status: statusString
+            });
 
-        // 4. Limpiar los parámetros de la URL de forma limpia
-        router.replace({ path: route.path, query: {} });
+            // B) Mostrar alerta Toast
+            toast.add({
+                severity: 'success',
+                summary: '¡Pago Confirmado!',
+                detail: orderId ? `Tu orden #${orderId} se completó con éxito.` : 'Tu compra fue procesada correctamente.',
+                life: 6000
+            });
+
+            // C) Vaciar el carrito local
+            localStorage.removeItem('cart');
+
+            // D) Limpiar los parámetros de la URL sin recargar
+            router.replace({ path: route.path, query: {} });
+
+        } catch (error) {
+            console.error('Error al registrar el pago en la BD:', error);
+        }
     }
 });
 </script>
