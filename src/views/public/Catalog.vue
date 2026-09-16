@@ -78,20 +78,32 @@ const filteredProducts = computed(() => {
 onMounted(() => {
     fetchCatalogData();
 
-    // Capturar si retorna desde Mercado Pago con pago exitoso
-    const paymentStatus = route.query.payment || route.query.collection_status || route.query.status;
-    const orderId = route.query.order_id || route.query.external_reference;
+    // 1. Convertir a String por si Vue Router lo recibe como Array de parámetros duplicados
+    const rawStatus = Array.isArray(route.query.collection_status) 
+        ? route.query.collection_status[0] 
+        : (route.query.collection_status || route.query.status);
 
-    if (paymentStatus === 'success' || paymentStatus === 'approved') {
+    const statusString = Array.isArray(rawStatus) ? rawStatus.join(',') : String(rawStatus || '');
+    
+    const orderId = Array.isArray(route.query.external_reference)
+        ? route.query.external_reference[0]
+        : (route.query.external_reference || route.query.order_id);
+
+    // 2. Verificar si el estado contiene 'approved' o 'success'
+    if (statusString.includes('approved') || statusString.includes('success')) {
         toast.add({
             severity: 'success',
             summary: '¡Pago Confirmado!',
             detail: orderId ? `Tu orden #${orderId} se completó con éxito.` : 'Tu compra fue procesada correctamente.',
-            life: 5000
+            life: 6000
         });
 
-        // Limpiar los parámetros de la URL sin recargar la página
-        router.replace({ query: {} });
+        // 3. Vaciar el carrito de compras local
+        // cartStore.clearCart(); 
+        localStorage.removeItem('cart');
+
+        // 4. Limpiar los parámetros de la URL de forma limpia
+        router.replace({ path: route.path, query: {} });
     }
 });
 </script>
