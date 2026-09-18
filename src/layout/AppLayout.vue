@@ -128,7 +128,7 @@ const handleLogout = () => {
                         </li>
                         <li>
                             <router-link 
-                                to="/admin/categories" 
+                                to="/admin/category" 
                                 class="flex align-items-center gap-3 px-3 py-2 border-round text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors no-underline"
                                 active-class="font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50"
                             >
@@ -144,6 +144,16 @@ const handleLogout = () => {
                             >
                                 <i class="pi pi-shopping-cart text-lg"></i>
                                 <span>Ventas / Pedidos</span>
+                            </router-link>
+                        </li>
+                        <li>
+                            <router-link 
+                                to="/admin/inventory-stock" 
+                                class="flex align-items-center gap-3 px-3 py-2 border-round text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors no-underline"
+                                active-class="font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50"
+                            >
+                                <i class="pi pi-shopping-cart text-lg"></i>
+                                <span>Control de inventario</span>
                             </router-link>
                         </li>
                         <li>

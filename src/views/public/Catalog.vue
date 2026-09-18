@@ -181,7 +181,7 @@ onMounted(async () => {
                             <div class="surface-card p-3 border-round shadow-1 h-full flex flex-column justify-content-between hover:shadow-3 transition-duration-200">
                                 <div>
                                     <div class="w-full border-round surface-100 flex align-items-center justify-content-center overflow-hidden mb-3" style="height: 180px;">
-                                        <img :src="prod.image_url || '/demo/images/product/placeholder.png'" :alt="prod.name" class="max-h-full max-w-full object-contain" />
+                                        <img :src="prod.image_path || '/demo/images/product/placeholder.png'" :alt="prod.name" class="max-h-full max-w-full object-contain" />
                                     </div>
                                     <small class="text-400 font-bold uppercase">{{ prod.category?.name || 'GENERAL' }}</small>
                                     <div class="text-900 font-bold text-lg mb-1">{{ prod.name }}</div>

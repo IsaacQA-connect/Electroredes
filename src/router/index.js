@@ -85,9 +85,20 @@ const router = createRouter({
                     component: () => import('@/views/admin/Orders.vue')
                 },
                 {
+                    path: 'category',
+                    name: 'category',
+                    component: () => import('@/views/admin/Category.vue')
+                },
+                {
                     path: 'cash-register',
                     name: 'admin-cash-register',
                     component: () => import('@/views/admin/CashRegister.vue')
+                },
+                
+                {
+                    path: 'inventory-stock',
+                    name: 'inventory-stock',
+                    component: () => import('@/views/admin/InventoryStockView.vue')
                 }
             ]
         },
