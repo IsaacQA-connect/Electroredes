@@ -105,7 +105,7 @@ const handleLogin = async () => {
 
 // Redirección hacia tu Backend para manejar OAuth2 / Laravel Socialite
 const handleSocialLogin = (provider) => {
-    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'https://electroredes-api.test/api/v1';
     window.location.href = `${backendUrl}/auth/${provider}/redirect`;
 };
 </script>
@@ -143,21 +143,7 @@ const handleSocialLogin = (provider) => {
                     <span class="font-bold text-sm text-700">Continuar con Google</span>
                 </Button>
 
-                <Button 
-                    type="button" 
-                    outlined 
-                    severity="secondary" 
-                    class="w-full border-round-3xl flex align-items-center justify-content-center gap-2 py-2"
-                    @click="handleSocialLogin('microsoft')"
-                >
-                    <svg width="18" height="18" viewBox="0 0 23 23">
-                        <path fill="#f35325" d="M1 1h10v10H1z"/>
-                        <path fill="#81bc06" d="M12 1h10v10H12z"/>
-                        <path fill="#05a6f0" d="M1 12h10v10H1z"/>
-                        <path fill="#ffba08" d="M12 12h10v10H12z"/>
-                    </svg>
-                    <span class="font-bold text-sm text-700">Continuar con Microsoft</span>
-                </Button>
+              
             </div>
 
             <Divider align="center" class="my-3">
@@ -187,7 +173,7 @@ const handleSocialLogin = (provider) => {
                 <div class="field mb-4">
                     <div class="flex justify-content-between align-items-center mb-2">
                         <label class="font-bold text-xs text-700 uppercase">Contraseña</label>
-                        <a href="#" class="text-xs text-primary font-bold hover:underline" @click.prevent="router.push('/auth/forgot-password')">
+                        <a href="#" class="text-xs text-primary font-bold hover:underline" @click.prevent="router.push('/forgot-password')">
                             ¿Olvidaste tu contraseña?
                         </a>
                     </div>

@@ -32,6 +32,12 @@ const router = createRouter({
         component: () => import('@/views/OrdersView.vue'),
         meta: { requiresAuth: true }
         },
+        {
+            path: '/facturacion/nueva',
+            name: 'invoice-create',
+            component: () => import('@/views/billing/InvoiceCreate.vue')
+        },
+
 
         /*
         |--------------------------------------------------------------------------
@@ -47,10 +53,29 @@ const router = createRouter({
         {
             path: '/auth/register',
             name: 'register',
-            component: () => import('@/views//pages/auth/RegisterView.vue'),
+            component: () => import('@/views/pages/auth/RegisterView.vue'),
             meta: { requiresGuest: true }
         },
-
+        {
+            path: '/auth/social-callback',
+            name: 'social-callback',
+            component: () => import('@/views/pages/auth/SocialCallback.vue')
+        },
+        {
+            path: '/forgot-password',
+            name: 'forgot-password',
+            component: () => import('@/views/pages/auth/ForgotPassword.vue')
+        },
+        {
+            path: '/reset-password',
+            name: 'reset-password',
+            component: () => import('@/views/pages/auth/ResetPassword.vue')
+        },
+        {
+            path: '/verify-email',
+            name: 'verify-email',
+            component: () => import('@/views/pages/auth/VerifyEmail.vue')
+        },
         /*
         |--------------------------------------------------------------------------
         | Rutas Protegidas (Panel Administrativo / POS)
@@ -99,6 +124,13 @@ const router = createRouter({
                     path: 'inventory-stock',
                     name: 'inventory-stock',
                     component: () => import('@/views/admin/InventoryStockView.vue')
+                },
+
+                {
+                    path: 'users',
+                    name: 'admin.users',
+                    component: () => import('@/views/admin/UsersIndex.vue'),
+                    meta: { title: 'Gestión de Usuarios - Admin' }
                 }
             ]
         },

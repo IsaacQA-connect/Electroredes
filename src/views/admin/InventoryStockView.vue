@@ -117,7 +117,7 @@ onMounted(() => {
             <div class="flex justify-content-between align-items-center mb-3">
                 <IconField iconPosition="left">
                     <InputIcon class="pi pi-search" />
-                    <InputText v-model="searchQuery" placeholder="Buscar por nombre, código o SKU..." class="p-inputtext-sm" @keyup.enter="fetchStock" />
+                    <InputText v-model="searchQuery" placeholder="Buscar por nombre, código, marca..." class="p-inputtext-sm" @keyup.enter="fetchStock" />
                 </IconField>
                 <Button icon="pi pi-refresh" text border-circle severity="secondary" @click="fetchStock" />
             </div>
@@ -125,7 +125,7 @@ onMounted(() => {
             <DataTable :value="products" :loading="loading" paginator :rows="10" responsiveLayout="scroll" class="p-datatable-sm">
                 <Column field="code" header="Código/SKU">
                     <template #body="slotProps">
-                        <span class="font-mono text-bold">{{ slotProps.data.code || slotProps.data.barcode || 'N/A' }}</span>
+                        <span class="font-mono font-bold">{{ slotProps.data.code || slotProps.data.barcode || 'N/A' }}</span>
                     </template>
                 </Column>
 
@@ -135,9 +135,16 @@ onMounted(() => {
                     </template>
                 </Column>
 
-                <Column field="category.name" header="Categoría">
+                <Column field="category.name" header="Categoría" sortable>
                     <template #body="slotProps">
                         <Tag :value="slotProps.data.category?.name || 'Sin Categoría'" severity="info" />
+                    </template>
+                </Column>
+
+                <!-- NUEVA COLUMNA: MARCA -->
+                <Column field="brand.name" header="Marca" sortable>
+                    <template #body="slotProps">
+                        <Tag :value="slotProps.data.brand?.name || 'Sin Marca'" severity="warn" />
                     </template>
                 </Column>
 
@@ -172,7 +179,7 @@ onMounted(() => {
             </DataTable>
         </div>
 
-        <!-- MODALES Hijos -->
+        <!-- MODALES HIJOS -->
         <InventoryAdjustmentModal v-model:visible="showAdjustmentModal" :type="adjustmentType" :productsList="products" @saved="handleSaved" />
         <ProductKardexModal v-model:visible="showKardexModal" :productId="selectedProductId" />
     </div>
