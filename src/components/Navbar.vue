@@ -1,7 +1,7 @@
 <script setup>
 import { useAuthStore } from '@/stores/auth';
 import { useCartStore } from '@/stores/cart';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import Badge from 'primevue/badge';
@@ -18,9 +18,16 @@ const cart = useCartStore();
 const searchQuery = ref('');
 const userMenu = ref();
 
-const userMenuItems = ref([
+// 1. Obtener el nombre o email de forma reactiva
+const displayName = computed(() => {
+    if (!auth.user) return 'Mi Cuenta';
+    return auth.user.name || auth.user.first_name || auth.user.email || 'Mi Cuenta';
+});
+
+// 2. Menú desplegable dinámico basado en el usuario logueado
+const userMenuItems = computed(() => [
     {
-        label: 'Mi Cuenta',
+        label: auth.user?.email || 'Mi Cuenta',
         items: [
             {
                 label: 'Mis Compras',
@@ -81,7 +88,7 @@ const handleSearch = () => {
                 </div>
             </div>
 
-            <!-- Buscador Corrección PrimeVue 4 (IconField + InputIcon) -->
+            <!-- Buscador -->
             <div class="flex-1 max-w-30rem hidden md:block">
                 <IconField iconPosition="right" class="w-full">
                     <InputText 
@@ -97,7 +104,7 @@ const handleSearch = () => {
             <!-- Acciones Derecha -->
             <div class="flex align-items-center gap-3">
                 
-                <!-- Botón Carrito Limpio (Sin fondo oscuro deformado) -->
+                <!-- Botón Carrito -->
                 <div class="relative cursor-pointer p-2 border-circle hover:surface-200 flex align-items-center justify-content-center transition-duration-150" @click="router.push('/cart')">
                     <i class="pi pi-shopping-cart text-2xl" style="color: #2D62A3;"></i>
                     <Badge 
@@ -114,7 +121,7 @@ const handleSearch = () => {
                 <template v-if="auth.token">
                     <Button 
                         icon="pi pi-user" 
-                        :label="auth.user?.name || 'Mi Cuenta'" 
+                        :label="displayName" 
                         text 
                         severity="secondary"
                         class="font-semibold text-sm border-round-3xl"
