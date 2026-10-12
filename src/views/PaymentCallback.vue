@@ -32,7 +32,7 @@ onMounted(async () => {
 
     try {
         // Confirmar el pago en el Backend
-        await api.post('/payments/confirm-payment', {
+        await api.post('/payments/confirm', {
             order_id: externalRef,
             payment_id: paymentId,
             status: status
