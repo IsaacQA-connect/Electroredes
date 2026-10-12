@@ -30,6 +30,11 @@ const userMenuItems = computed(() => [
         label: auth.user?.email || 'Mi Cuenta',
         items: [
             {
+                label: 'Mi Perfil',
+                icon: 'pi pi-user-edit',
+                command: () => router.push('/profile')
+            },
+            {
                 label: 'Mis Compras',
                 icon: 'pi pi-box',
                 command: () => router.push('/my-orders')

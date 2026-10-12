@@ -29,14 +29,13 @@ export const useCartStore = defineStore('cart', () => {
     localStorage.setItem(key, JSON.stringify(items.value));
   };
 
-  // ¡CLAVE DEL ÉXITO!
-  // Observar cuando cambia auth.user (por Login, Logout o cambio de cuenta)
+  // Observar cuando cambia auth.user (Login, Logout o cambio de cuenta)
   watch(
     () => auth.user?.id,
     () => {
-      loadCart(); // Recarga automáticamente el carrito asignado al nuevo usuario ID o al invitado
+      loadCart();
     },
-    { immediate: true } // Ejecutar inmediatamente al montar el store
+    { immediate: true }
   );
 
   // --- Getters ---
@@ -56,15 +55,24 @@ export const useCartStore = defineStore('cart', () => {
   const addItem = (product, quantity = 1) => {
     const existingIndex = items.value.findIndex(i => i.id === product.id);
 
+    // Extraer la ruta de la imagen priorizando image_path
+    const imageUrl = product.image_path || product.image_url || product.image || null;
+
     if (existingIndex !== -1) {
       items.value[existingIndex].quantity += quantity;
+      // Asegurar que si la imagen no estaba seteada, se actualice
+      if (!items.value[existingIndex].image_path) {
+        items.value[existingIndex].image_path = imageUrl;
+        items.value[existingIndex].image = imageUrl;
+      }
     } else {
       items.value.push({
         id: product.id,
         name: product.name,
         price: Number(product.price || 0),
         sale_price: Number(product.sale_price || product.price || 0),
-        image: product.image_url || null,
+        image_path: imageUrl, // Se guarda image_path idéntico a Catalog.vue
+        image: imageUrl,      // Respaldo de compatibilidad
         stock: product.stock,
         quantity: quantity
       });

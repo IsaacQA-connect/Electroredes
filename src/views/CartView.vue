@@ -42,7 +42,7 @@
                 <template #body="{ data }">
                   <div class="flex align-items-center gap-3">
                     <img 
-                      :src="data.image || '/demo/images/product/placeholder.png'" 
+                      :src="getProductImage(data)" 
                       :alt="data.name" 
                       class="w-4rem h-4rem border-round object-contain surface-100 p-1" 
                     />
@@ -175,5 +175,21 @@ const goToCheckout = () => {
   } else {
     router.push('/checkout');
   }
+};
+
+const getProductImage = (item) => {
+    // Busca la imagen en la raíz del objeto o dentro del objeto anidado 'product'
+    const imagePath = item.image_path 
+                   || item.product?.image_path 
+                   || item.image_url 
+                   || item.product?.image_url 
+                   || item.image 
+                   || item.product?.image;
+
+    if (!imagePath) {
+        return '/demo/images/product/placeholder.png';
+    }
+
+    return imagePath;
 };
 </script>

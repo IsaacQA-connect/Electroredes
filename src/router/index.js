@@ -1,6 +1,5 @@
 import AppLayout from '@/layout/AppLayout.vue'; // Layout del Panel Admin
 import { createRouter, createWebHistory } from 'vue-router';
-// Importa tu layout público si tienes uno (ej. ShopLayout), si no, puedes cargarlo dinámicamente
 
 const router = createRouter({
     history: createWebHistory(),
@@ -22,22 +21,34 @@ const router = createRouter({
             meta: { requiresAuth: true } // El checkout requiere sesión iniciada
         },
         {
-        path: '/cart',
-        name: 'cart',
-        component: () => import('@/views/CartView.vue')
+            path: '/cart',
+            name: 'cart',
+            component: () => import('@/views/CartView.vue')
         },
         {
-        path: '/my-orders',
-        name: 'my-orders',
-        component: () => import('@/views/OrdersView.vue'),
-        meta: { requiresAuth: true }
+            path: '/my-orders',
+            name: 'my-orders',
+            component: () => import('@/views/OrdersView.vue'),
+            meta: { requiresAuth: true }
+        },
+        {
+            path: '/profile',
+            name: 'profile',
+            component: () => import('@/views/MyProfile.vue'),
+            meta: { requiresAuth: true }
+        },
+        {
+            path: '/payment/callback',
+            name: 'payment-callback',
+            component: () => import('@/views/PaymentCallback.vue'),
+            meta: { requiresAuth: true }
         },
         {
             path: '/facturacion/nueva',
             name: 'invoice-create',
-            component: () => import('@/views/billing/InvoiceCreate.vue')
+            component: () => import('@/views/billing/InvoiceCreate.vue'),
+            meta: { requiresAuth: true }
         },
-
 
         /*
         |--------------------------------------------------------------------------
@@ -76,6 +87,7 @@ const router = createRouter({
             name: 'verify-email',
             component: () => import('@/views/pages/auth/VerifyEmail.vue')
         },
+
         /*
         |--------------------------------------------------------------------------
         | Rutas Protegidas (Panel Administrativo / POS)
@@ -119,13 +131,11 @@ const router = createRouter({
                     name: 'admin-cash-register',
                     component: () => import('@/views/admin/CashRegister.vue')
                 },
-                
                 {
                     path: 'inventory-stock',
                     name: 'inventory-stock',
                     component: () => import('@/views/admin/InventoryStockView.vue')
                 },
-
                 {
                     path: 'users',
                     name: 'admin.users',
