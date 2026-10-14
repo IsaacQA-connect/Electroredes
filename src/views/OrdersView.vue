@@ -59,8 +59,8 @@
           <Column header="Comprobante" style="width: 15%;">
             <template #body="{ data }">
               <Tag 
-                :value="data.invoice_type || 'BOLETA'" 
-                severity="secondary" 
+                :value="getInvoiceTypeLabel(data)" 
+                :severity="getInvoiceTypeLabel(data) === 'FACTURA' ? 'info' : 'secondary'" 
                 class="text-xs font-bold"
               />
             </template>
@@ -138,27 +138,30 @@
                   <i class="pi pi-file mr-1 text-primary"></i> Comprobante SUNAT
                 </span>
                 <div class="text-sm text-700">
-                  <p class="m-0 mb-1"><strong>Tipo:</strong> {{ selectedOrder.invoice_type || 'BOLETA' }}</p>
+                  <p class="m-0 mb-1">
+                    <strong>Tipo:</strong> {{ getInvoiceTypeLabel(selectedOrder) }}
+                  </p>
                   <p v-if="selectedOrder.document_number" class="m-0 mb-1">
-                    <strong>{{ selectedOrder.invoice_type === 'FACTURA' ? 'RUC' : 'DNI' }}:</strong> {{ selectedOrder.document_number }}
+                    <strong>{{ getInvoiceTypeLabel(selectedOrder) === 'FACTURA' ? 'RUC' : 'DNI' }}:</strong> {{ selectedOrder.document_number }}
                   </p>
                   <p v-if="selectedOrder.business_name" class="m-0 mb-1">
                     <strong>Razón Social:</strong> {{ selectedOrder.business_name }}
                   </p>
-                  <p v-if="selectedOrder.invoice_number" class="m-0 mb-2">
-                    <strong>N° Serie:</strong> {{ selectedOrder.invoice_number }}
+                  <p v-if="selectedOrder.invoice_number || selectedOrder.invoice?.series" class="m-0 mb-2">
+                    <strong>N° Serie:</strong> {{ selectedOrder.invoice_number || (selectedOrder.invoice?.series + '-' + selectedOrder.invoice?.number) }}
                   </p>
 
                   <!-- Botones de Descarga PDF/XML -->
-                  <div v-if="selectedOrder.pdf_url || selectedOrder.invoice_number" class="flex gap-2 mt-3">
+                  <div v-if="selectedOrder.invoice_number || selectedOrder.invoice || selectedOrder.pdf_url" class="flex gap-2 mt-3">
                     <Button 
-                      label="PDF" 
+                      label="Ver PDF" 
                       icon="pi pi-file-pdf" 
                       severity="danger" 
                       size="small" 
                       outlined 
-                      class="border-round-2xl text-xs"
-                      @click="downloadVoucher(selectedOrder.id, 'pdf')"
+                      class="border-round-2xl text-xs font-bold"
+                      :loading="downloadingFormat === 'pdf'"
+                      @click="downloadVoucher(selectedOrder, 'pdf')"
                     />
                     <Button 
                       label="XML" 
@@ -166,8 +169,9 @@
                       severity="secondary" 
                       size="small" 
                       outlined 
-                      class="border-round-2xl text-xs"
-                      @click="downloadVoucher(selectedOrder.id, 'xml')"
+                      class="border-round-2xl text-xs font-bold"
+                      :loading="downloadingFormat === 'xml'"
+                      @click="downloadVoucher(selectedOrder, 'xml')"
                     />
                   </div>
                   <span v-else class="text-xs text-500 italic block mt-2">
@@ -251,6 +255,7 @@ const orders = ref([]);
 const loading = ref(true);
 const displayDetailModal = ref(false);
 const selectedOrder = ref(null);
+const downloadingFormat = ref(null);
 
 // Cargar Pedidos del usuario
 const fetchOrders = async () => {
@@ -278,27 +283,65 @@ const openOrderDetails = async (orderId) => {
   }
 };
 
-// Descargar Comprobante PDF / XML
-const downloadVoucher = async (orderId, format) => {
+// Descargar o Visualizar Comprobante PDF / XML
+const downloadVoucher = async (order, format) => {
+  downloadingFormat.value = format;
+  const orderId = order.id;
+  const filename = order.invoice_number ? `${order.invoice_number}.${format}` : `orden-${orderId}.${format}`;
+
   try {
     const response = await api.get(`/orders/${orderId}/download-${format}`, {
       responseType: 'blob'
     });
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `comprobante-orden-${orderId}.${format}`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+
+    const blob = new Blob([response.data], { 
+      type: format === 'pdf' ? 'application/pdf' : 'application/xml' 
+    });
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    if (format === 'pdf') {
+      // Abre el PDF en una pestaña del navegador para vista previa/impresión
+      window.open(blobUrl, '_blank');
+    } else {
+      // Fuerza la descarga directa para archivos XML
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
   } catch (error) {
+    let errorMessage = `El archivo ${format.toUpperCase()} aún no está disponible.`;
+    
+    // Decodificar el mensaje JSON si el servidor devolvió un error empaquetado en Blob
+    if (error.response && error.response.data instanceof Blob) {
+      try {
+        const text = await error.response.data.text();
+        const json = JSON.parse(text);
+        if (json.message) errorMessage = json.message;
+      } catch (e) {
+        // Fallback a mensaje por defecto si no es JSON válido
+      }
+    }
+
     toast.add({
       severity: 'warn',
-      summary: 'Archivo no disponible',
-      detail: `El archivo ${format.toUpperCase()} no está disponible para descarga aún.`,
+      summary: 'Comprobante no disponible',
+      detail: errorMessage,
       life: 4000
     });
+  } finally {
+    downloadingFormat.value = null;
   }
+};
+
+// Detectar Factura vs Boleta
+const getInvoiceTypeLabel = (order) => {
+  if (order.invoice_type) return order.invoice_type.toUpperCase();
+  if (order.invoice?.document_type === '01') return 'FACTURA';
+  if (order.invoice_number && order.invoice_number.startsWith('F')) return 'FACTURA';
+  return 'BOLETA';
 };
 
 // Mapeador de colores de Badge según Estado
