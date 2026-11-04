@@ -18,7 +18,11 @@ const toast = useToast();
 
 const products = ref([]);
 const categories = ref([]);
+const brands = ref([]); // <-- Nueva referencia para marcas
+
 const selectedCategory = ref(null);
+const selectedBrand = ref(null); // <-- Nueva referencia para marca seleccionada
+
 const sortOrder = ref('name-asc');
 const loading = ref(true);
 
@@ -35,15 +39,18 @@ const fetchCatalogData = async () => {
         const params = {};
         if (route.query.search) params.search = route.query.search;
         if (selectedCategory.value) params.category_id = selectedCategory.value;
+        if (selectedBrand.value) params.brand_id = selectedBrand.value; // <-- Envía filtro de marca a API
 
-        const [prodRes, catRes] = await Promise.all([
+        const [prodRes, catRes, brandRes] = await Promise.all([
             api.get('/products', { params }),
-            api.get('/categories')
+            api.get('/categories'),
+            api.get('/brands') // <-- Consulta de marcas a la API
         ]);
         
         const rawProducts = prodRes.data.data || prodRes.data;
         products.value = rawProducts.filter(p => p.status && p.stock > 0);
         categories.value = catRes.data.data || catRes.data || [];
+        brands.value = brandRes.data.data || brandRes.data || [];
     } catch (err) {
         console.error('Error al cargar catálogo:', err);
     } finally {
@@ -53,6 +60,11 @@ const fetchCatalogData = async () => {
 
 const filterByCategory = (catId) => {
     selectedCategory.value = catId;
+    fetchCatalogData();
+};
+
+const filterByBrand = (brandId) => {
+    selectedBrand.value = brandId;
     fetchCatalogData();
 };
 
@@ -80,7 +92,6 @@ onMounted(async () => {
         fetchCatalogData();
     }
 
-    // 1. Extraer correctamente los parámetros aunque vengan en Array
     const paymentId = Array.isArray(route.query.payment_id) 
         ? route.query.payment_id[0] 
         : route.query.payment_id;
@@ -95,17 +106,14 @@ onMounted(async () => {
 
     const statusString = String(rawStatus || '').toLowerCase();
 
-    // 2. Verificar si el pago fue aprobado
     if (paymentId && (statusString === 'approved' || statusString === 'success')) {
         try {
-            // A) Forzar actualización directa en la Base de Datos desde el cliente
             await api.post('/payments/confirm', {
                 order_id: orderId,
                 payment_id: paymentId,
                 status: statusString
             });
 
-            // B) Mostrar alerta Toast
             toast.add({
                 severity: 'success',
                 summary: '¡Pago Confirmado!',
@@ -113,10 +121,7 @@ onMounted(async () => {
                 life: 6000
             });
 
-            // C) Vaciar el carrito local
             localStorage.removeItem('cart');
-
-            // D) Limpiar los parámetros de la URL sin recargar
             router.replace({ path: route.path, query: {} });
 
         } catch (error) {
@@ -133,9 +138,10 @@ onMounted(async () => {
 
         <div class="mx-auto px-4" style="max-width: 1200px;">
             <div class="grid">
-                <!-- Sidebar Categorías -->
+                <!-- Sidebar (Categorías + Marcas) -->
                 <div class="col-12 md:col-3">
-                    <div class="surface-card p-3 border-round shadow-1">
+                    <!-- Sidebar Categorías -->
+                    <div class="surface-card p-3 border-round shadow-1 mb-3">
                         <h5 class="mb-3 font-bold text-900">Categorías</h5>
                         <ul class="list-none p-0 m-0">
                             <li 
@@ -154,6 +160,30 @@ onMounted(async () => {
                                 @click="filterByCategory(cat.id)"
                             >
                                 <i class="pi pi-tag mr-2"></i> {{ cat.name }}
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Sidebar Marcas -->
+                    <div class="surface-card p-3 border-round shadow-1">
+                        <h5 class="mb-3 font-bold text-900">Marcas</h5>
+                        <ul class="list-none p-0 m-0">
+                            <li 
+                                class="py-2 px-3 border-round cursor-pointer hover:surface-hover mb-1 flex align-items-center" 
+                                :style="selectedBrand === null ? 'background-color: #EBF2FA; color: #2D62A3; font-weight: bold;' : ''"
+                                @click="filterByBrand(null)"
+                            >
+                                <i class="pi pi-bookmark mr-2"></i> Todas las Marcas
+                            </li>
+
+                            <li 
+                                v-for="brand in brands" 
+                                :key="brand.id" 
+                                class="py-2 px-3 border-round cursor-pointer hover:surface-hover mb-1 flex align-items-center"
+                                :style="selectedBrand === brand.id ? 'background-color: #EBF2FA; color: #2D62A3; font-weight: bold;' : ''"
+                                @click="filterByBrand(brand.id)"
+                            >
+                                <i class="pi pi-briefcase mr-2"></i> {{ brand.name }}
                             </li>
                         </ul>
                     </div>
@@ -183,7 +213,10 @@ onMounted(async () => {
                                     <div class="w-full border-round surface-100 flex align-items-center justify-content-center overflow-hidden mb-3" style="height: 180px;">
                                         <img :src="prod.image_path || '/demo/images/product/placeholder.png'" :alt="prod.name" class="max-h-full max-w-full object-contain" />
                                     </div>
-                                    <small class="text-400 font-bold uppercase">{{ prod.category?.name || 'GENERAL' }}</small>
+                                    <div class="flex justify-content-between align-items-center mb-1">
+                                        <small class="text-400 font-bold uppercase">{{ prod.category?.name || 'GENERAL' }}</small>
+                                        <small v-if="prod.brand?.name" class="text-500 font-semibold px-2 py-1 surface-200 border-round">{{ prod.brand.name }}</small>
+                                    </div>
                                     <div class="text-900 font-bold text-lg mb-1">{{ prod.name }}</div>
                                     <p class="text-500 text-sm mb-2 line-clamp-2">{{ prod.description || 'Sin descripción disponible.' }}</p>
                                     <div class="text-xs text-600 mb-2"><i class="pi pi-box mr-1"></i>Stock: {{ prod.stock }}</div>
