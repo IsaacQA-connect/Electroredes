@@ -22,4 +22,5 @@ const shouldShowNavbar = computed(() => {
       <router-view />
     </main>
   </div>
+  <ChatbotWidget />
 </template>

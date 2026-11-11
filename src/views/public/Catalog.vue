@@ -74,7 +74,19 @@ watch(() => route.query.search, () => {
 
 const filteredProducts = computed(() => {
     let list = [...products.value];
+    // 1. Filtro en memoria por texto del buscador (Nombre, Descripción, Categoría y MARCA)
+    const searchQuery = (route.query.search || '').toString().toLowerCase().trim();
+    if (searchQuery) {
+        list = list.filter(p => {
+            const nameMatch = p.name?.toLowerCase().includes(searchQuery);
+            const descMatch = p.description?.toLowerCase().includes(searchQuery);
+            const catMatch = p.category?.name?.toLowerCase().includes(searchQuery);
+            const brandMatch = p.brand?.name?.toLowerCase().includes(searchQuery); // <-- Coincidencia por marca
 
+            return nameMatch || descMatch || catMatch || brandMatch;
+        });
+    }
+    
     if (sortOrder.value === 'name-asc') list.sort((a, b) => a.name.localeCompare(b.name));
     if (sortOrder.value === 'name-desc') list.sort((a, b) => b.name.localeCompare(a.name));
     if (sortOrder.value === 'price-asc') {
