@@ -105,7 +105,15 @@ const sendMessage = async () => {
 
   try {
     // Consumir API de Laravel
-    const response = await axios.post('/chatbot/query', { message: text });
+    const response = await axios.post('https://apielectroredes.soportecenter.com/api/v1/chatbot/query',
+        { message: text },
+        {
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        }
+    );
     
     messages.value.push({
       sender: 'bot',
