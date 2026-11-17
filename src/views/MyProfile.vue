@@ -99,6 +99,7 @@ onMounted(async () => {
     if (!authStore.user) {
         await authStore.fetchUser();
     }
+    await authStore.fetchUser();
     loadUserData();
 });
 
