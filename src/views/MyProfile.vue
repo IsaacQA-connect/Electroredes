@@ -323,6 +323,7 @@ const saveProfile = async () => {
                                 :maxlength="maxDocumentLength"
                                 :placeholder="documentPlaceholder"
                                 :disabled="searchingDoc"
+                                :class="{ 'p-invalid': errors.document_number }"
                                 @keypress="['DNI', 'RUC'].includes(form.document_type) && onlyNumbers($event)"
                                 @input="onDocumentNumberInput"
                                 @keyup.enter.prevent="lookupDocument"
@@ -337,6 +338,7 @@ const saveProfile = async () => {
                                 @click="lookupDocument"
                             />
                         </div>
+                        <small v-if="errors.document_number" class="p-error">{{ errors.document_number[0] }}</small>
                         <small v-if="['DNI', 'RUC'].includes(form.document_type)" class="text-500">
                             Se autocompletará al ingresar los {{ form.document_type === 'DNI' ? '8' : '11' }} dígitos.
                         </small>
