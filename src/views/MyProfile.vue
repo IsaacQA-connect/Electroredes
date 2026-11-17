@@ -20,6 +20,7 @@ const searchingDoc = ref(false);
 const sunatStatus = ref(null);
 const lastFetchedDoc = ref('');
 const autoFilledAddress = ref(false);
+const errors = ref({});
 
 const docTypes = [
     { label: 'DNI (8 dígitos)', value: 'DNI' },
@@ -79,8 +80,9 @@ const clearPreviousLookup = () => {
 
 // Cargar datos actuales del usuario/cliente
 const loadUserData = () => {
-    const user = authStore.user;
-    const customer = user?.customer || user;
+    const rawUser = authStore.user;
+    const user = rawUser?.user || rawUser;
+    const customer = user?.customer;
 
     if (user) {
         form.name = user.name || '';
@@ -89,16 +91,15 @@ const loadUserData = () => {
 
     if (customer) {
         form.phone = customer.phone || '';
-        form.document_type = customer.document_type || 'DNI';
+        const dbDocType = (customer.document_type || 'DNI').toUpperCase();
+        form.document_type = ['DNI', 'RUC'].includes(dbDocType) ? dbDocType : 'DNI';
         form.document_number = customer.document_number || '';
         form.address = customer.address || '';
     }
 };
 
 onMounted(async () => {
-    if (!authStore.user) {
-        await authStore.fetchUser();
-    }
+    loadUserData();
     await authStore.fetchUser();
     loadUserData();
 });
@@ -178,6 +179,7 @@ const lookupDocument = async () => {
 const onDocumentNumberInput = () => {
   if (['DNI', 'RUC'].includes(form.document_type)) {
     form.document_number = form.document_number.replace(/\D/g, '');
+    
   }
 
   // Si el usuario empieza a borrar o cambiar el número ya consultado, limpia los datos anteriores
@@ -225,6 +227,7 @@ const saveProfile = async () => {
     }
 
     loading.value = true;
+    errors.value = {};
 
     try {
         const payload = {
@@ -237,6 +240,7 @@ const saveProfile = async () => {
 
         await api.put('/auth/me', payload);
         await authStore.fetchUser();
+        loadUserData();
 
         toast.add({ 
             severity: 'success', 
@@ -245,9 +249,14 @@ const saveProfile = async () => {
             life: 4000 
         });
     } catch (error) {
-        console.error('Error al actualizar perfil:', error);
-        const detail = error.response?.data?.message || 'No se pudieron actualizar tus datos.';
-        toast.add({ severity: 'error', summary: 'Error', detail, life: 5000 });
+        if (error.response?.status === 422 && error.response.data?.errors) {
+            errors.value = error.response.data.errors;
+            const firstError = Object.values(errors.value).flat()[0];
+            toast.add({ severity: 'warn', summary: 'Dato Inválido', detail: firstError, life: 5000 });
+        } else {
+            const detail = error.response?.data?.message || 'No se pudieron actualizar tus datos.';
+            toast.add({ severity: 'error', summary: 'Error', detail, life: 5000 });
+        }
     } finally {
         loading.value = false;
     }
