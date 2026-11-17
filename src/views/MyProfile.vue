@@ -24,9 +24,17 @@ const autoFilledAddress = ref(false);
 const docTypes = [
     { label: 'DNI (8 dígitos)', value: 'DNI' },
     { label: 'RUC (11 dígitos)', value: 'RUC' },
-    { label: 'Carnet de Extranjería', value: 'CE' },
-    { label: 'Pasaporte', value: 'PASAPORTE' }
+    //{ label: 'Carnet de Extranjería', value: 'CE' },
+    //{ label: 'Pasaporte', value: 'PASAPORTE' }
 ];
+
+//Bloquea cualquier tecla que no sea número (0-9) al escribir
+const onlyNumbers = (event) => {
+  if (event.ctrlKey || event.metaKey) return; // Permite Ctrl+C, Ctrl+V, Ctrl+A
+  if (!/^\d$/.test(event.key)) {
+    event.preventDefault();
+  }
+};
 
 const form = reactive({
     name: '',
@@ -300,10 +308,12 @@ const saveProfile = async () => {
                         <div class="flex gap-2">
                             <InputText 
                                 v-model="form.document_number" 
+                                inputmode="numeric"
                                 class="w-full" 
                                 :maxlength="maxDocumentLength"
                                 :placeholder="documentPlaceholder"
                                 :disabled="searchingDoc"
+                                @keypress="['DNI', 'RUC'].includes(form.document_type) && onlyNumbers($event)"
                                 @input="onDocumentNumberInput"
                                 @keyup.enter.prevent="lookupDocument"
                             />
@@ -364,6 +374,8 @@ const saveProfile = async () => {
                             class="w-full" 
                             placeholder="Ej: 987654321" 
                             maxlength="9"
+                            inputmode="numeric"
+                            @keypress="onlyNumbers"
                             @input="onPhoneInput"
                         />
                     </div>
