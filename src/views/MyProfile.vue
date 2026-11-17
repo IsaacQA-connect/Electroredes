@@ -1,7 +1,7 @@
 <script setup>
 import api from '@/service/api';
 import { useAuthStore } from '@/stores/auth';
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import Button from 'primevue/button';
@@ -16,6 +16,8 @@ const authStore = useAuthStore();
 const toast = useToast();
 
 const loading = ref(false);
+const searchingDoc = ref(false);
+const sunatStatus = ref(null);
 
 const docTypes = [
     { label: 'DNI (8 dígitos)', value: 'DNI' },
@@ -31,6 +33,26 @@ const form = reactive({
     document_type: 'DNI',
     document_number: '',
     address: ''
+});
+
+// Propiedades computadas para validación y UI dinámica
+const maxDocumentLength = computed(() => {
+    if (form.document_type === 'DNI') return 8;
+    if (form.document_type === 'RUC') return 11;
+    return 20;
+});
+
+const documentPlaceholder = computed(() => {
+    if (form.document_type === 'DNI') return 'Ej: 71234567';
+    if (form.document_type === 'RUC') return 'Ej: 20601234567';
+    return 'Ingresa tu documento';
+});
+
+const canLookupDocument = computed(() => {
+    const clean = form.document_number.trim();
+    if (form.document_type === 'DNI') return /^\d{8}$/.test(clean);
+    if (form.document_type === 'RUC') return /^\d{11}$/.test(clean);
+    return false;
 });
 
 // Cargar datos actuales del usuario/cliente
@@ -52,34 +74,119 @@ const loadUserData = () => {
 };
 
 onMounted(async () => {
-    // Si aún no tenemos los datos completos, refrescamos desde /auth/me
     if (!authStore.user) {
         await authStore.fetchUser();
     }
     loadUserData();
 });
 
+// Consulta DNI / RUC al backend (APIsPERU)
+const lookupDocument = async () => {
+    if (!canLookupDocument.value || searchingDoc.value) return;
+
+    searchingDoc.value = true;
+    sunatStatus.value = null;
+
+    const docNum = form.document_number.trim();
+    const endpoint = form.document_type === 'DNI'
+        ? `/lookup/dni/${docNum}`
+        : `/lookup/ruc/${docNum}`;
+
+    try {
+        const response = await api.get(endpoint);
+        const resData = response.data;
+        const raw = resData.raw || resData.data || resData;
+
+        let fullName = resData.name || '';
+        let fiscalAddress = resData.address || '';
+
+        // Extracción alternativa si el backend retorna los campos crudos de APIsPERU
+        if (!fullName) {
+            if (form.document_type === 'DNI') {
+                fullName = [raw.nombres, raw.apellidoPaterno, raw.apellidoMaterno]
+                    .filter(Boolean)
+                    .join(' ')
+                    .trim();
+            } else if (form.document_type === 'RUC') {
+                fullName = raw.razonSocial || '';
+                fiscalAddress = raw.direccion || '';
+            }
+        }
+
+        if (fullName) {
+            form.name = fullName;
+        }
+
+        // Autocompletar dirección fiscal si es RUC y SUNAT devuelve una dirección válida
+        if (form.document_type === 'RUC') {
+            if (fiscalAddress && fiscalAddress !== '-') {
+                form.address = fiscalAddress;
+            }
+            if (raw.estado || raw.condicion || resData.state || resData.condition) {
+                sunatStatus.value = {
+                    estado: resData.state || raw.estado || '',
+                    condicion: resData.condition || raw.condicion || ''
+                };
+            }
+        }
+
+        toast.add({
+            severity: 'success',
+            summary: `${form.document_type} Validado`,
+            detail: fullName || 'Datos autocompletados correctamente.',
+            life: 3000
+        });
+    } catch (error) {
+        const detail = error.response?.data?.message || `No se encontraron datos para el ${form.document_type}. Puedes editarlo manualmente.`;
+        toast.add({
+            severity: 'warn',
+            summary: 'Sin resultados',
+            detail,
+            life: 4000
+        });
+    } finally {
+        searchingDoc.value = false;
+    }
+};
+
+// Sanitizar entrada numérica y disparar consulta al completar 8 u 11 dígitos
+const onDocumentNumberInput = () => {
+    if (['DNI', 'RUC'].includes(form.document_type)) {
+        form.document_number = form.document_number.replace(/\D/g, '');
+    }
+
+    if (canLookupDocument.value) {
+        lookupDocument();
+    } else {
+        sunatStatus.value = null;
+    }
+};
+
+const handleDocumentTypeChange = () => {
+    form.document_number = '';
+    sunatStatus.value = null;
+};
+
+const onPhoneInput = () => {
+    form.phone = form.phone.replace(/\D/g, '');
+};
+
 const saveProfile = async () => {
-    // Validaciones
     if (!form.name.trim()) {
-        toast.add({ severity: 'warn', summary: 'Campo Requerido', detail: 'El nombre completo es obligatorio.', life: 3500 });
+        toast.add({ severity: 'warn', summary: 'Campo Requerido', detail: 'El nombre o razón social es obligatorio.', life: 3500 });
         return;
     }
 
     const docNum = form.document_number.trim();
 
-    if (form.document_type === 'DNI' && docNum) {
-        if (!/^\d{8}$/.test(docNum)) {
-            toast.add({ severity: 'warn', summary: 'DNI Inválido', detail: 'El DNI debe tener exactamente 8 dígitos numéricos.', life: 4000 });
-            return;
-        }
+    if (form.document_type === 'DNI' && docNum && !/^\d{8}$/.test(docNum)) {
+        toast.add({ severity: 'warn', summary: 'DNI Inválido', detail: 'El DNI debe tener exactamente 8 dígitos numéricos.', life: 4000 });
+        return;
     }
 
-    if (form.document_type === 'RUC' && docNum) {
-        if (!/^\d{11}$/.test(docNum)) {
-            toast.add({ severity: 'warn', summary: 'RUC Inválido', detail: 'El RUC debe tener exactamente 11 dígitos numéricos.', life: 4000 });
-            return;
-        }
+    if (form.document_type === 'RUC' && docNum && !/^\d{11}$/.test(docNum)) {
+        toast.add({ severity: 'warn', summary: 'RUC Inválido', detail: 'El RUC debe tener exactamente 11 dígitos numéricos.', life: 4000 });
+        return;
     }
 
     loading.value = true;
@@ -93,10 +200,7 @@ const saveProfile = async () => {
             address: form.address.trim() || null
         };
 
-        // Enviar actualización al Backend
         await api.put('/auth/me', payload);
-
-        // Refrescar el estado global de Pinia para que el Navbar y Checkout tengan los datos actualizados
         await authStore.fetchUser();
 
         toast.add({ 
@@ -105,7 +209,6 @@ const saveProfile = async () => {
             detail: 'Tus datos se guardaron correctamente.', 
             life: 4000 
         });
-
     } catch (error) {
         console.error('Error al actualizar perfil:', error);
         const detail = error.response?.data?.message || 'No se pudieron actualizar tus datos.';
@@ -130,7 +233,7 @@ const saveProfile = async () => {
                 </div>
             </div>
 
-            <!-- Alerta para usuarios registados con Google sin DNI -->
+            <!-- Alerta para usuarios registrados con Google sin DNI -->
             <Message 
                 v-if="!form.document_number" 
                 severity="info" 
@@ -152,19 +255,6 @@ const saveProfile = async () => {
                 </h3>
 
                 <div class="grid">
-                    <!-- Nombre Completo -->
-                    <div class="col-12 md:col-6 field mb-3">
-                        <label class="font-bold text-700 block mb-2">Nombre Completo *</label>
-                        <InputText v-model="form.name" class="w-full" placeholder="Ingresa tu nombre completo" />
-                    </div>
-
-                    <!-- Correo Electrónico (Readonly) -->
-                    <div class="col-12 md:col-6 field mb-3">
-                        <label class="font-bold text-700 block mb-2">Correo Electrónico</label>
-                        <InputText v-model="form.email" class="w-full surface-200 cursor-not-allowed" disabled />
-                        <small class="text-500">El correo está vinculado a tu cuenta y no se puede editar.</small>
-                    </div>
-
                     <!-- Tipo de Documento -->
                     <div class="col-12 md:col-6 field mb-3">
                         <label class="font-bold text-700 block mb-2">Tipo de Documento</label>
@@ -174,29 +264,89 @@ const saveProfile = async () => {
                             optionLabel="label" 
                             optionValue="value" 
                             class="w-full"
+                            @change="handleDocumentTypeChange"
                         />
                     </div>
 
-                    <!-- Número de Documento -->
+                    <!-- Número de Documento + Botón de Búsqueda -->
                     <div class="col-12 md:col-6 field mb-3">
                         <label class="font-bold text-700 block mb-2">Número de Documento (DNI/RUC)</label>
+                        <div class="flex gap-2">
+                            <InputText 
+                                v-model="form.document_number" 
+                                class="w-full" 
+                                :maxlength="maxDocumentLength"
+                                :placeholder="documentPlaceholder"
+                                :disabled="searchingDoc"
+                                @input="onDocumentNumberInput"
+                                @keyup.enter.prevent="lookupDocument"
+                            />
+                            <Button
+                                v-if="['DNI', 'RUC'].includes(form.document_type)"
+                                type="button"
+                                icon="pi pi-search"
+                                :loading="searchingDoc"
+                                :disabled="!canLookupDocument"
+                                style="background-color: #2D62A3; border-color: #2D62A3;"
+                                @click="lookupDocument"
+                            />
+                        </div>
+                        <small v-if="['DNI', 'RUC'].includes(form.document_type)" class="text-500">
+                            Se autocompletará al ingresar los {{ form.document_type === 'DNI' ? '8' : '11' }} dígitos.
+                        </small>
+                    </div>
+
+                    <!-- Nombre Completo / Razón Social -->
+                    <div class="col-12 md:col-6 field mb-3">
+                        <label class="font-bold text-700 block mb-2">
+                            {{ form.document_type === 'RUC' ? 'Razón Social *' : 'Nombre Completo *' }}
+                        </label>
                         <InputText 
-                            v-model="form.document_number" 
+                            v-model="form.name" 
                             class="w-full" 
-                            :maxlength="form.document_type === 'DNI' ? 8 : (form.document_type === 'RUC' ? 11 : 20)"
-                            placeholder="Ej: 71234567" 
+                            :placeholder="form.document_type === 'RUC' ? 'Ej: ELECTROREDES S.A.C.' : 'Ingresa tu nombre completo'" 
                         />
+                        <!-- Etiquetas de estado SUNAT si se consultó un RUC -->
+                        <div v-if="form.document_type === 'RUC' && sunatStatus" class="flex gap-2 mt-2">
+                            <span 
+                                class="text-xs font-semibold px-2 py-1 border-round"
+                                :class="sunatStatus.estado === 'ACTIVO' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                            >
+                                Estado: {{ sunatStatus.estado }}
+                            </span>
+                            <span 
+                                class="text-xs font-semibold px-2 py-1 border-round"
+                                :class="sunatStatus.condicion === 'HABIDO' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'"
+                            >
+                                Condición: {{ sunatStatus.condicion }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Correo Electrónico (Readonly) -->
+                    <div class="col-12 md:col-6 field mb-3">
+                        <label class="font-bold text-700 block mb-2">Correo Electrónico</label>
+                        <InputText v-model="form.email" class="w-full surface-200 cursor-not-allowed" disabled />
+                        <small class="text-500">El correo está vinculado a tu cuenta y no se puede editar.</small>
                     </div>
 
                     <!-- Teléfono / Celular -->
                     <div class="col-12 md:col-6 field mb-3">
                         <label class="font-bold text-700 block mb-2">Teléfono / Celular</label>
-                        <InputText v-model="form.phone" class="w-full" placeholder="Ej: 987654321" maxlength="9" />
+                        <InputText 
+                            v-model="form.phone" 
+                            class="w-full" 
+                            placeholder="Ej: 987654321" 
+                            maxlength="9"
+                            @input="onPhoneInput"
+                        />
                     </div>
 
                     <!-- Dirección Principal -->
                     <div class="col-12 field mb-3">
-                        <label class="font-bold text-700 block mb-2">Dirección Principal de Entrega</label>
+                        <label class="font-bold text-700 block mb-2">
+                            {{ form.document_type === 'RUC' ? 'Dirección Fiscal / de Entrega' : 'Dirección Principal de Entrega' }}
+                        </label>
                         <InputText v-model="form.address" class="w-full" placeholder="Ej: Av. Principal 456, Int. 201, Lima" />
                     </div>
                 </div>
