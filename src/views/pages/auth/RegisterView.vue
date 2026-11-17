@@ -1,6 +1,5 @@
 <template>
   <div class="surface-ground flex align-items-center justify-content-center min-screen-height p-3">
-    <!-- Componente Toast para alertas flotantes globales -->
     <Toast />
 
     <div class="surface-card p-4 md:p-5 shadow-2 border-round-xl w-full max-w-30rem">
@@ -12,30 +11,12 @@
         </router-link>
       </div>
 
-      <!-- Advertencia general si hay errores de validación -->
       <Message v-if="hasFormErrors" severity="warn" :closable="false" class="mb-4">
         Por favor, corrige los campos señalados antes de continuar.
       </Message>
 
       <form @submit.prevent="handleRegister">
-        <!-- Nombre Completo -->
-        <div class="mb-3">
-          <label for="name" class="block text-900 font-semibold mb-2 text-sm">
-            Nombre Completo <span class="text-red-500">*</span>
-          </label>
-          <InputText 
-            id="name" 
-            v-model="form.name" 
-            type="text" 
-            placeholder="Ej. Juan Pérez" 
-            class="w-full"
-            :class="{ 'p-invalid': errors.name }"
-            @input="validateField('name')"
-          />
-          <small v-if="errors.name" class="p-error block mt-1 text-xs">{{ errors.name[0] }}</small>
-        </div>
-
-        <!-- Documento: Tipo y Número -->
+        <!-- Documento: Tipo y Número con Consulta Automática -->
         <div class="formgrid grid mb-3">
           <div class="col-12 md:col-5 mb-3 md:mb-0">
             <label for="document_type" class="block text-900 font-semibold mb-2 text-sm">
@@ -56,20 +37,51 @@
             <label for="document_number" class="block text-900 font-semibold mb-2 text-sm">
               N° Documento <span class="text-red-500">*</span>
             </label>
-            <InputText 
-              id="document_number" 
-              v-model="form.document_number" 
-              type="text" 
-              :placeholder="documentPlaceholder" 
-              :maxlength="maxDocumentLength"
-              class="w-full"
-              :class="{ 'p-invalid': errors.document_number }"
-              @input="onDocumentNumberInput"
-            />
+            <div class="p-inputgroup">
+              <InputText 
+                id="document_number" 
+                v-model="form.document_number" 
+                type="text" 
+                :placeholder="documentPlaceholder" 
+                :maxlength="maxDocumentLength"
+                :disabled="searchingDoc"
+                class="w-full"
+                :class="{ 'p-invalid': errors.document_number }"
+                @input="onDocumentNumberInput"
+                @keyup.enter.prevent="lookupDocument"
+              />
+              <Button 
+                v-if="['DNI', 'RUC'].includes(form.document_type)"
+                type="button"
+                icon="pi pi-search" 
+                :loading="searchingDoc"
+                :disabled="!canLookupDocument"
+                v-tooltip.top="'Consultar en RENIEC / SUNAT'"
+                @click="lookupDocument"
+              />
+            </div>
             <small v-if="errors.document_number" class="p-error block mt-1 text-xs">
               {{ errors.document_number[0] }}
             </small>
           </div>
+        </div>
+
+        <!-- Nombre Completo o Razón Social -->
+        <div class="mb-3">
+          <label for="name" class="block text-900 font-semibold mb-2 text-sm">
+            {{ form.document_type === 'RUC' ? 'Razón Social' : 'Nombre Completo' }}
+            <span class="text-red-500">*</span>
+          </label>
+          <InputText 
+            id="name" 
+            v-model="form.name" 
+            type="text" 
+            :placeholder="form.document_type === 'RUC' ? 'Ej. ELECTROREDES S.A.C.' : 'Ej. Juan Pérez'" 
+            class="w-full"
+            :class="{ 'p-invalid': errors.name }"
+            @input="validateField('name')"
+          />
+          <small v-if="errors.name" class="p-error block mt-1 text-xs">{{ errors.name[0] }}</small>
         </div>
 
         <!-- Correo Electrónico y Teléfono -->
@@ -180,7 +192,6 @@
 </template>
 
 <script setup>
-//import api from '@/api/axios';
 import api from '@/service/api';
 import Button from 'primevue/button';
 import Dropdown from 'primevue/dropdown';
@@ -196,6 +207,7 @@ const router = useRouter();
 const toast = useToast();
 
 const loading = ref(false);
+const searchingDoc = ref(false);
 const errors = ref({});
 
 const documentTypes = [
@@ -215,11 +227,10 @@ const form = reactive({
   address: ''
 });
 
-// Configuración dinámica por tipo de documento
 const maxDocumentLength = computed(() => {
   if (form.document_type === 'DNI') return 8;
   if (form.document_type === 'RUC') return 11;
-  return 12; // CE
+  return 12;
 });
 
 const documentPlaceholder = computed(() => {
@@ -228,16 +239,84 @@ const documentPlaceholder = computed(() => {
   return 'N° de Carnet';
 });
 
+const canLookupDocument = computed(() => {
+  if (form.document_type === 'DNI') return form.document_number.length === 8;
+  if (form.document_type === 'RUC') return form.document_number.length === 11;
+  return false;
+});
+
 const hasFormErrors = computed(() => Object.keys(errors.value).length > 0);
 
-// Restricción de entrada solo números
 const sanitizeNumericInput = (val) => val.replace(/\D/g, '');
+
+// Consulta DNI / RUC al backend
+const lookupDocument = async () => {
+  if (!canLookupDocument.value || searchingDoc.value) return;
+
+  searchingDoc.value = true;
+  const endpoint = form.document_type === 'DNI'
+    ? `/lookup/dni/${form.document_number}`
+    : `/lookup/ruc/${form.document_number}`;
+
+  try {
+    const response = await api.get(endpoint);
+    const resData = response.data;
+
+    let fullName = resData.name || '';
+    let fiscalAddress = resData.address || '';
+
+    // Compatibilidad si el backend devuelve la respuesta cruda dentro de "data"
+    if (!fullName && resData.data) {
+      const raw = resData.data;
+      if (form.document_type === 'DNI') {
+        fullName = [raw.nombres, raw.apellidoPaterno, raw.apellidoMaterno]
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+      } else if (form.document_type === 'RUC') {
+        fullName = raw.razonSocial || '';
+        fiscalAddress = raw.direccion || '';
+      }
+    }
+
+    if (fullName) {
+      form.name = fullName;
+      delete errors.value.name;
+    }
+
+    if (fiscalAddress && fiscalAddress !== '-') {
+      form.address = fiscalAddress;
+      delete errors.value.address;
+    }
+
+    toast.add({
+      severity: 'success',
+      summary: `${form.document_type} Encontrado`,
+      detail: fullName || 'Datos cargados correctamente.',
+      life: 2500
+    });
+  } catch (error) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Sin resultados',
+      detail: error.response?.data?.message || `No se encontraron datos para el ${form.document_type}. Puedes ingresarlo manualmente.`,
+      life: 3500
+    });
+  } finally {
+    searchingDoc.value = false;
+  }
+};
 
 const onDocumentNumberInput = () => {
   if (['DNI', 'RUC'].includes(form.document_type)) {
     form.document_number = sanitizeNumericInput(form.document_number);
   }
   validateDocumentNumber();
+
+  // Disparo automático al completar los 8 dígitos (DNI) u 11 dígitos (RUC)
+  if (canLookupDocument.value) {
+    lookupDocument();
+  }
 };
 
 const onPhoneInput = () => {
@@ -256,7 +335,6 @@ const handleDocumentTypeChange = () => {
   delete errors.value.document_number;
 };
 
-// Validaciones locales rápidas
 const validateDocumentNumber = () => {
   if (form.document_type === 'DNI' && form.document_number.length !== 8) {
     errors.value.document_number = ['El DNI debe contener exactamente 8 dígitos.'];
@@ -296,14 +374,11 @@ const validateField = (field) => {
   }
 };
 
-// Envió del Formulario al Backend
 const handleRegister = async () => {
-  // Ejecutar validaciones locales finales
-  console.log('1. Iniciando proceso de registro...');
   validateDocumentNumber();
   validateEmail();
   validatePasswords();
-console.log('2. Errores de validación actuales:', errors.value);
+
   if (hasFormErrors.value) {
     toast.add({
       severity: 'warn',
@@ -311,7 +386,6 @@ console.log('2. Errores de validación actuales:', errors.value);
       detail: 'Revisa los errores resaltados antes de enviar.',
       life: 4000
     });
-    console.log('4. Enviando datos al backend:', form);
     return;
   }
 
@@ -320,23 +394,20 @@ console.log('2. Errores de validación actuales:', errors.value);
 
   try {
     const response = await api.post('/auth/register', form);
-    console.log('4. Enviando datos al backend:', form);
     const { token, user } = response.data;
     localStorage.setItem('token', token);
     localStorage.setItem('user_role', user.role.name);
-    console.log('4. Enviando datos al backend:', form);
+
     toast.add({
       severity: 'success',
       summary: '¡Registro Exitoso!',
       detail: `Bienvenido/a, ${user.name}`,
       life: 3000
     });
-    console.log('4. Enviando datos al backend:', form);
 
     setTimeout(() => {
       router.push({ name: 'catalog' });
     }, 1200);
-
   } catch (error) {
     if (error.response && error.response.status === 422) {
       errors.value = error.response.data.errors;
@@ -346,7 +417,6 @@ console.log('2. Errores de validación actuales:', errors.value);
         detail: 'Corrige los datos indicados por el sistema.',
         life: 5000
       });
-      console.log('4. Enviando datos al backend:', form);
     } else {
       toast.add({
         severity: 'error',
@@ -354,11 +424,9 @@ console.log('2. Errores de validación actuales:', errors.value);
         detail: error.response?.data?.message || 'No se pudo completar el registro.',
         life: 5000
       });
-      console.log('4. Enviando datos al backend:', form);
     }
   } finally {
     loading.value = false;
-    console.log('4. Enviando datos al backend:', form);
   }
 };
 </script>
