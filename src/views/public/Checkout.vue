@@ -74,25 +74,29 @@ const canLookupDocument = computed(() => {
 });
 
 // Precargar datos registrados en Mi Perfil
-const loadProfileData = () => {
-    const user = auth.user;
-    const customer = user?.customer || user;
-    if (!customer) return;
+const autoFilledAddress = ref(false);
 
-    // 1. Datos de Entrega
-    if (customer.address) {
+const loadProfileData = () => {
+    const rawUser = auth.user;
+    const user = rawUser?.user || rawUser;
+    const customer = user?.customer;
+    if (!user) return;
+
+    // 1. Datos de Entrega desde BD
+    if (customer?.address) {
         shippingAddress.value = customer.address;
         profileBackup.value.address = customer.address;
+        autoFilledAddress.value = false;
     }
-    if (customer.phone) {
+    if (customer?.phone) {
         contactPhone.value = customer.phone.replace(/\D/g, '').slice(0, 9);
         profileBackup.value.phone = contactPhone.value;
     }
 
-    // 2. Datos de Comprobante (DNI o RUC registrado en perfil)
-    const docType = (customer.document_type || '').toUpperCase();
-    const docNum = (customer.document_number || '').replace(/\D/g, '');
-    const fullName = user?.name || customer?.name || '';
+    // 2. Datos de Comprobante (DNI o RUC registrado en Mi Perfil)
+    const docType = (customer?.document_type || '').toUpperCase();
+    const docNum = (customer?.document_number || '').replace(/\D/g, '');
+    const fullName = user.name || customer?.name || '';
 
     if (docType === 'DNI' && /^\d{8}$/.test(docNum)) {
         profileBackup.value.dni = docNum;
@@ -100,20 +104,21 @@ const loadProfileData = () => {
         invoiceType.value = 'BOLETA';
         documentNumber.value = docNum;
         customerName.value = fullName;
+        lastFetchedDoc.value = docNum; // Permite limpiar el nombre si edita el DNI
     } else if (docType === 'RUC' && /^\d{11}$/.test(docNum)) {
         profileBackup.value.ruc = docNum;
         profileBackup.value.rucName = fullName;
         invoiceType.value = 'FACTURA';
         documentNumber.value = docNum;
         businessName.value = fullName;
+        lastFetchedDoc.value = docNum; // Permite limpiar la razón social si edita el RUC
     }
 };
 
 onMounted(async () => {
-    if (!auth.user) {
-        await auth.fetchUser();
-    }
-    loadProfileData();
+    loadProfileData();       // Carga inmediata desde caché si existe
+    await auth.fetchUser();  // Trae los datos frescos de GET /auth/me (users + customer)
+    loadProfileData();       // Actualiza los campos con lo último guardado en BD
 });
 
 // Alternar entre Boleta y Factura restaurando el documento del perfil si existe
@@ -145,6 +150,10 @@ const clearPreviousLookup = () => {
     if (lastFetchedDoc.value) {
         customerName.value = '';
         businessName.value = '';
+        if (autoFilledAddress.value) {
+            shippingAddress.value = profileBackup.value.address || '';
+            autoFilledAddress.value = false;
+        }
         lastFetchedDoc.value = '';
     }
     sunatStatus.value = null;
@@ -194,6 +203,7 @@ const lookupDocument = async () => {
             // Si el usuario no tiene dirección de entrega aún, autocompletar con la fiscal
             if (!shippingAddress.value.trim() && fiscalAddress && fiscalAddress !== '-') {
                 shippingAddress.value = fiscalAddress;
+                autoFilledAddress.value = true;
             }
             if (raw.estado || raw.condicion || resData.state || resData.condition) {
                 sunatStatus.value = {
