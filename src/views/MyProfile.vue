@@ -18,6 +18,8 @@ const toast = useToast();
 const loading = ref(false);
 const searchingDoc = ref(false);
 const sunatStatus = ref(null);
+const lastFetchedDoc = ref('');
+const autoFilledAddress = ref(false);
 
 const docTypes = [
     { label: 'DNI (8 dígitos)', value: 'DNI' },
@@ -55,6 +57,18 @@ const canLookupDocument = computed(() => {
     return false;
 });
 
+const clearPreviousLookup = () => {
+  if (lastFetchedDoc.value) {
+    form.name = '';
+    if (autoFilledAddress.value) {
+      form.address = '';
+      autoFilledAddress.value = false;
+    }
+    lastFetchedDoc.value = '';
+  }
+  sunatStatus.value = null;
+};
+
 // Cargar datos actuales del usuario/cliente
 const loadUserData = () => {
     const user = authStore.user;
@@ -82,89 +96,101 @@ onMounted(async () => {
 
 // Consulta DNI / RUC al backend (APIsPERU)
 const lookupDocument = async () => {
-    if (!canLookupDocument.value || searchingDoc.value) return;
+  if (!canLookupDocument.value || searchingDoc.value) return;
 
-    searchingDoc.value = true;
-    sunatStatus.value = null;
+  // Limpiar siempre antes de iniciar una nueva consulta
+  clearPreviousLookup();
+  searchingDoc.value = true;
 
-    const docNum = form.document_number.trim();
-    const endpoint = form.document_type === 'DNI'
-        ? `/lookup/dni/${docNum}`
-        : `/lookup/ruc/${docNum}`;
+  const docNum = form.document_number.trim();
+  const endpoint = form.document_type === 'DNI'
+    ? `/lookup/dni/${docNum}`
+    : `/lookup/ruc/${docNum}`;
 
-    try {
-        const response = await api.get(endpoint);
-        const resData = response.data;
-        const raw = resData.raw || resData.data || resData;
+  try {
+    const response = await api.get(endpoint);
+    const resData = response.data;
+    const raw = resData.raw || resData.data || resData;
 
-        let fullName = resData.name || '';
-        let fiscalAddress = resData.address || '';
+    let fullName = resData.name || '';
+    let fiscalAddress = resData.address || '';
 
-        // Extracción alternativa si el backend retorna los campos crudos de APIsPERU
-        if (!fullName) {
-            if (form.document_type === 'DNI') {
-                fullName = [raw.nombres, raw.apellidoPaterno, raw.apellidoMaterno]
-                    .filter(Boolean)
-                    .join(' ')
-                    .trim();
-            } else if (form.document_type === 'RUC') {
-                fullName = raw.razonSocial || '';
-                fiscalAddress = raw.direccion || '';
-            }
-        }
-
-        if (fullName) {
-            form.name = fullName;
-        }
-
-        // Autocompletar dirección fiscal si es RUC y SUNAT devuelve una dirección válida
-        if (form.document_type === 'RUC') {
-            if (fiscalAddress && fiscalAddress !== '-') {
-                form.address = fiscalAddress;
-            }
-            if (raw.estado || raw.condicion || resData.state || resData.condition) {
-                sunatStatus.value = {
-                    estado: resData.state || raw.estado || '',
-                    condicion: resData.condition || raw.condicion || ''
-                };
-            }
-        }
-
-        toast.add({
-            severity: 'success',
-            summary: `${form.document_type} Validado`,
-            detail: fullName || 'Datos autocompletados correctamente.',
-            life: 3000
-        });
-    } catch (error) {
-        const detail = error.response?.data?.message || `No se encontraron datos para el ${form.document_type}. Puedes editarlo manualmente.`;
-        toast.add({
-            severity: 'warn',
-            summary: 'Sin resultados',
-            detail,
-            life: 4000
-        });
-    } finally {
-        searchingDoc.value = false;
+    if (!fullName) {
+      if (form.document_type === 'DNI') {
+        fullName = [raw.nombres, raw.apellidoPaterno, raw.apellidoMaterno]
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+      } else if (form.document_type === 'RUC') {
+        fullName = raw.razonSocial || '';
+        fiscalAddress = raw.direccion || '';
+      }
     }
+
+    if (fullName) {
+      form.name = fullName;
+      lastFetchedDoc.value = docNum; // Marca este documento como autocompletado
+      if (typeof errors !== 'undefined' && errors.value) delete errors.value.name;
+    }
+
+    if (form.document_type === 'RUC') {
+      if (fiscalAddress && fiscalAddress !== '-') {
+        form.address = fiscalAddress;
+        autoFilledAddress.value = true; // Permite limpiarla si luego cambia a DNI
+        if (typeof errors !== 'undefined' && errors.value) delete errors.value.address;
+      }
+      if (raw.estado || raw.condicion || resData.state || resData.condition) {
+        sunatStatus.value = {
+          estado: resData.state || raw.estado || '',
+          condicion: resData.condition || raw.condicion || ''
+        };
+      }
+    }
+
+    toast.add({
+      severity: 'success',
+      summary: `${form.document_type} Encontrado`,
+      detail: fullName || 'Datos cargados correctamente.',
+      life: 2500
+    });
+  } catch (error) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Sin resultados',
+      detail: error.response?.data?.message || `No se encontraron datos para el ${form.document_type}.`,
+      life: 3500
+    });
+  } finally {
+    searchingDoc.value = false;
+  }
 };
 
 // Sanitizar entrada numérica y disparar consulta al completar 8 u 11 dígitos
 const onDocumentNumberInput = () => {
-    if (['DNI', 'RUC'].includes(form.document_type)) {
-        form.document_number = form.document_number.replace(/\D/g, '');
-    }
+  if (['DNI', 'RUC'].includes(form.document_type)) {
+    form.document_number = form.document_number.replace(/\D/g, '');
+  }
 
-    if (canLookupDocument.value) {
-        lookupDocument();
-    } else {
-        sunatStatus.value = null;
-    }
+  // Si el usuario empieza a borrar o cambiar el número ya consultado, limpia los datos anteriores
+  if (lastFetchedDoc.value && form.document_number !== lastFetchedDoc.value) {
+    clearPreviousLookup();
+  }
+
+  if (typeof validateDocumentNumber === 'function') {
+    validateDocumentNumber();
+  }
+
+  if (canLookupDocument.value) {
+    lookupDocument();
+  }
 };
 
 const handleDocumentTypeChange = () => {
-    form.document_number = '';
-    sunatStatus.value = null;
+  form.document_number = '';
+  clearPreviousLookup();
+  if (typeof errors !== 'undefined' && errors.value) {
+    delete errors.value.document_number;
+  }
 };
 
 const onPhoneInput = () => {
