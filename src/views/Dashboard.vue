@@ -35,20 +35,70 @@ const stats = ref({
     pendingOrders: 0,
     lowStock: 0,
     inventoryValue: 0,
-    totalProducts: 0
+    totalProducts: 0,
+    averageTicket: 0
 });
 
 // Listas para Tablas
 const recentOrders = ref([]);
 const topProducts = ref([]);
 
+// Plugin ligero para dibujar el % directamente sobre cada porción del gráfico Doughnut
+const doughnutPercentagePlugin = {
+    id: 'doughnutPercentage',
+    afterDatasetsDraw(chart) {
+        const { ctx, data } = chart;
+        const dataset = data.datasets?.[0];
+        if (!dataset || !dataset.data?.length) return;
+
+        const total = dataset.data.reduce((acc, val) => acc + (Number(val) || 0), 0);
+        if (total <= 0) return;
+
+        const meta = chart.getDatasetMeta(0);
+        ctx.save();
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        meta.data.forEach((element, index) => {
+            const value = Number(dataset.data[index]) || 0;
+            const pct = (value / total) * 100;
+            if (pct >= 7) {
+                const { x, y } = element.tooltipPosition();
+                ctx.fillText(`${pct.toFixed(1)}%`, x, y);
+            }
+        });
+        ctx.restore();
+    }
+};
+
 // Configuración de Gráficos (Chart.js via PrimeVue)
 const channelChartData = ref({});
 const channelChartOptions = ref({
     responsive: true,
     maintainAspectRatio: false,
+    cutout: '58%',
     plugins: {
-        legend: { position: 'bottom' }
+        legend: {
+            position: 'bottom',
+            labels: {
+                usePointStyle: true,
+                padding: 16,
+                font: { size: 12, weight: '600' }
+            }
+        },
+        tooltip: {
+            callbacks: {
+                label: (context) => {
+                    const value = Number(context.raw) || 0;
+                    const dataset = context.dataset.data || [];
+                    const total = dataset.reduce((acc, v) => acc + (Number(v) || 0), 0);
+                    const pct = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+                    return ` ${formatCurrency(value)} (${pct}%)`;
+                }
+            }
+        }
     }
 });
 
@@ -57,10 +107,15 @@ const trendChartOptions = ref({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-        legend: { display: false }
+        legend: { display: false },
+        tooltip: {
+            callbacks: {
+                label: (context) => ` Ventas: ${formatCurrency(context.raw)}`
+            }
+        }
     },
     scales: {
-        y: { 
+        y: {
             beginAtZero: true,
             ticks: {
                 callback: (value) => 'S/ ' + value.toLocaleString('es-PE')
@@ -68,6 +123,23 @@ const trendChartOptions = ref({
         }
     }
 });
+
+// Helpers de Cliente y Canal
+const getCustomerName = (order) => {
+    if (!order) return '';
+    return (
+        order.customer?.name ||
+        order.business_name ||
+        (order.channel === 'POS' ? 'Cliente POS' : 'Cliente Web')
+    );
+};
+
+const formatChannelName = (channel) => {
+    const normalized = (channel || '').toUpperCase();
+    if (normalized === 'POS') return 'POS (Tienda Física)';
+    if (normalized === 'WEB') return 'Tienda Web';
+    return channel || 'Venta Directa';
+};
 
 // Formateador oficial de Moneda Peruana (S/)
 const formatCurrency = (val) => {
@@ -89,14 +161,12 @@ const marginSeverity = computed(() => {
 const fetchDashboardData = async () => {
     loading.value = true;
     try {
-        // Construir parámetros de filtro para la API analítica
         const metricsParams = { period: selectedPeriod.value };
         if (selectedPeriod.value === 'custom' && startDate.value && endDate.value) {
             metricsParams.start_date = startDate.value;
             metricsParams.end_date = endDate.value;
         }
 
-        // Carga simultánea del controlador analítico y servicios existentes
         const [metricsRes, ordersRes, stockRes, valuationRes] = await Promise.all([
             api.get('/dashboard/metrics', { params: metricsParams }),
             api.get('/orders'),
@@ -111,23 +181,45 @@ const fetchDashboardData = async () => {
         stats.value.profitMargin = Number(metrics.kpis?.profit_margin_percentage || 0);
         topProducts.value = metrics.top_products || [];
 
-        // Gráfico de Ventas por Canal
-        const channels = (metrics.sales_by_channel || []).map(c => c.channel || 'VENTA DIRECTA');
-        const channelTotals = (metrics.sales_by_channel || []).map(c => Number(c.total_amount || 0));
-        
+        // Gráfico de Ventas por Canal con Porcentajes en Leyenda
+        const rawChannels = metrics.sales_by_channel || [];
+        const channelTotals = rawChannels.map(c => Number(c.total_amount || 0));
+        const grandChannelTotal = channelTotals.reduce((acc, v) => acc + v, 0);
+
+        const channelLabels = rawChannels.map((c, idx) => {
+            const name = formatChannelName(c.channel);
+            const pct = grandChannelTotal > 0
+                ? ((channelTotals[idx] / grandChannelTotal) * 100).toFixed(1)
+                : '0.0';
+            return `${name} (${pct}%)`;
+        });
+
+        // Colores consistentes por canal (POS = Naranja/Dorado, WEB = Azul)
+        const channelColors = rawChannels.map(c => {
+            const ch = (c.channel || '').toUpperCase();
+            if (ch === 'POS') return '#D8AC67';
+            if (ch === 'WEB') return '#2D62A3';
+            return '#10B981';
+        });
+
         channelChartData.value = {
-            labels: channels.length ? channels : ['Sin ventas'],
+            labels: channelLabels.length ? channelLabels : ['Sin ventas (0%)'],
             datasets: [{
                 data: channelTotals.length ? channelTotals : [0],
-                backgroundColor: ['#2D62A3', '#D8AC67', '#10B981', '#6366F1', '#EC4899'],
-                hoverBackgroundColor: ['#1E4575', '#B88F4C', '#059669', '#4F46E5', '#DB2777']
+                backgroundColor: channelColors.length ? channelColors : ['#CBD5E1'],
+                hoverBackgroundColor: rawChannels.map(c => {
+                    const ch = (c.channel || '').toUpperCase();
+                    if (ch === 'POS') return '#B88F4C';
+                    if (ch === 'WEB') return '#1E4575';
+                    return '#059669';
+                })
             }]
         };
 
-        // Gráfico de Tendencia de Ventas (Filtrado por periodo)
+        // Gráfico de Tendencia de Ventas
         const dates = (metrics.sales_trend || []).map(t => formatDateShort(t.date));
         const totals = (metrics.sales_trend || []).map(t => Number(t.daily_total || 0));
-        
+
         trendChartData.value = {
             labels: dates,
             datasets: [{
@@ -142,10 +234,24 @@ const fetchDashboardData = async () => {
             }]
         };
 
-        // 2. Pedidos Recientes y Pendientes
-        const ordersData = ordersRes.data.data || ordersRes.data || [];
+        // 2. Pedidos Recientes (ordenados del más reciente al más antiguo)
+        const ordersData = (ordersRes.data.data || ordersRes.data || []).sort((a, b) => {
+            const dateA = new Date((a.order_date || a.created_at || '').replace(' ', 'T'));
+            const dateB = new Date((b.order_date || b.created_at || '').replace(' ', 'T'));
+            return dateB - dateA || b.id - a.id;
+        });
+
         recentOrders.value = ordersData.slice(0, 5);
-        stats.value.pendingOrders = ordersData.filter(o => ['PENDIENTE', 'PENDING'].includes(o.status?.toUpperCase())).length;
+        stats.value.pendingOrders = ordersData.filter(o =>
+            ['PENDIENTE', 'PENDING'].includes(o.status?.toUpperCase())
+        ).length;
+
+        // Ticket promedio de pedidos válidos
+        const validOrders = ordersData.filter(o =>
+            !['CANCELLED', 'CANCELADO'].includes(o.status?.toUpperCase())
+        );
+        const validSum = validOrders.reduce((acc, o) => acc + (Number(o.total) || 0), 0);
+        stats.value.averageTicket = validOrders.length > 0 ? validSum / validOrders.length : 0;
 
         // 3. Stock Crítico
         const lowStockData = stockRes.data.data || stockRes.data || [];
@@ -164,30 +270,51 @@ const fetchDashboardData = async () => {
 };
 
 const handlePeriodChange = () => {
-    if (selectedPeriod.value !== 'custom') {
-        fetchDashboardData();
+    if (selectedPeriod.value === 'custom') {
+        if (!endDate.value) {
+            const today = new Date();
+            const weekAgo = new Date();
+            weekAgo.setDate(today.getDate() - 7);
+            endDate.value = today.toISOString().split('T')[0];
+            startDate.value = weekAgo.toISOString().split('T')[0];
+        }
+        return;
     }
+    fetchDashboardData();
 };
 
 const getStatusSeverity = (status) => {
     switch (status?.toUpperCase()) {
         case 'COMPLETADO':
-        case 'COMPLETED': 
+        case 'COMPLETED':
             return 'success';
         case 'PENDIENTE':
-        case 'PENDING': 
+        case 'PENDING':
             return 'warn';
         case 'CANCELADO':
-        case 'CANCELLED': 
+        case 'CANCELLED':
             return 'danger';
-        default: 
+        default:
             return 'info';
     }
 };
 
+const getStatusLabel = (status) => {
+    const labels = {
+        PENDING: 'Pendiente',
+        PENDIENTE: 'Pendiente',
+        COMPLETED: 'Completado',
+        COMPLETADO: 'Completado',
+        CANCELLED: 'Cancelado',
+        CANCELADO: 'Cancelado'
+    };
+    return labels[status?.toUpperCase()] || status || 'Pendiente';
+};
+
 const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('es-PE', {
+    const normalized = typeof dateString === 'string' ? dateString.replace(' ', 'T') : dateString;
+    return new Date(normalized).toLocaleDateString('es-PE', {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric'
@@ -207,7 +334,7 @@ onMounted(() => {
 
 <template>
     <div class="surface-ground p-4 border-round-xl">
-        
+
         <!-- ENCABEZADO Y FILTROS POR FECHA -->
         <div class="flex flex-column lg:flex-row justify-content-between align-items-start lg:align-items-center mb-4 gap-3">
             <div>
@@ -217,12 +344,12 @@ onMounted(() => {
 
             <!-- FILTRO DE FECHAS Y ACCIONES -->
             <div class="flex flex-wrap align-items-center gap-2 w-full lg:w-auto">
-                
+
                 <!-- Selector de Periodo -->
                 <div class="flex align-items-center gap-2 bg-white border-1 surface-border border-round-3xl px-3 py-1 shadow-1">
                     <i class="pi pi-calendar text-500"></i>
-                    <select 
-                        v-model="selectedPeriod" 
+                    <select
+                        v-model="selectedPeriod"
                         @change="handlePeriodChange"
                         class="border-none bg-transparent text-sm font-semibold text-700 outline-none cursor-pointer py-1"
                     >
@@ -234,61 +361,88 @@ onMounted(() => {
 
                 <!-- Entradas de Rango Personalizado -->
                 <div v-if="selectedPeriod === 'custom'" class="flex align-items-center gap-2 bg-white p-1 border-1 surface-border border-round-3xl shadow-1">
-                    <input 
-                        type="date" 
-                        v-model="startDate" 
+                    <input
+                        type="date"
+                        v-model="startDate"
                         class="border-none text-xs text-700 outline-none px-2 py-1"
                     />
                     <span class="text-400 text-xs">-</span>
-                    <input 
-                        type="date" 
-                        v-model="endDate" 
+                    <input
+                        type="date"
+                        v-model="endDate"
                         class="border-none text-xs text-700 outline-none px-2 py-1"
                     />
-                    <Button 
-                        icon="pi pi-search" 
+                    <Button
+                        icon="pi pi-search"
                         class="p-button-sm p-button-rounded p-button-text"
+                        :disabled="!startDate || !endDate"
                         @click="fetchDashboardData"
                     />
                 </div>
 
                 <!-- Botón de Refrescar -->
-                <Button 
-                    icon="pi pi-refresh" 
-                    text 
-                    rounded 
-                    severity="secondary" 
+                <Button
+                    icon="pi pi-refresh"
+                    text
+                    rounded
+                    severity="secondary"
                     v-tooltip.top="'Actualizar datos'"
                     :loading="loading"
-                    @click="fetchDashboardData" 
+                    @click="fetchDashboardData"
                 />
 
                 <!-- Accesos Rápidos Modulares -->
-                <Button 
-                    label="Inventario" 
-                    icon="pi pi-box" 
-                    class="p-button-sm border-round-3xl" 
-                    style="background-color: #2D62A3; border-color: #2D62A3;" 
-                    @click="router.push('/admin/inventory-stock')" 
+                <Button
+                    label="Inventario"
+                    icon="pi pi-box"
+                    class="p-button-sm border-round-3xl"
+                    style="background-color: #2D62A3; border-color: #2D62A3;"
+                    @click="router.push('/admin/inventory-stock')"
                 />
-                <Button 
-                    label="Pedidos" 
-                    icon="pi pi-shopping-bag" 
-                    class="p-button-sm border-round-3xl" 
+                <Button
+                    label="Pedidos"
+                    icon="pi pi-shopping-bag"
+                    class="p-button-sm border-round-3xl"
                     severity="secondary"
-                    @click="router.push('/admin/orders')" 
+                    @click="router.push('/admin/orders')"
                 />
-                <Button 
-                    label="Caja" 
-                    icon="pi pi-wallet" 
-                    class="p-button-sm border-round-3xl" 
+                <Button
+                    label="Caja"
+                    icon="pi pi-wallet"
+                    class="p-button-sm border-round-3xl"
                     severity="help"
-                    @click="router.push('/admin/cash-register')" 
+                    @click="router.push('/admin/cash-register')"
                 />
             </div>
         </div>
 
-        <!-- TARJETAS DE MÉTRICAS / KPIS (5 Métricas Financieras y Operativas) -->
+        <!-- ALERTAS OPERATIVAS RÁPIDAS -->
+        <div
+            v-if="!loading && (stats.lowStock > 0 || stats.pendingOrders > 0)"
+            class="flex flex-wrap gap-2 mb-4"
+        >
+            <div
+                v-if="stats.pendingOrders > 0"
+                class="flex align-items-center gap-2 bg-orange-50 border-1 border-orange-200 text-orange-800 px-3 py-2 border-round-lg text-xs font-semibold cursor-pointer"
+                @click="router.push('/admin/orders')"
+            >
+                <i class="pi pi-clock"></i>
+                <span>Tienes {{ stats.pendingOrders }} pedido(s) pendiente(s) por atender.</span>
+                <i class="pi pi-arrow-right text-xs"></i>
+            </div>
+
+            <div
+                v-if="stats.lowStock > 0"
+                class="flex align-items-center gap-2 bg-red-50 border-1 border-red-200 text-red-800 px-3 py-2 border-round-lg text-xs font-semibold cursor-pointer"
+                @click="router.push('/admin/inventory-stock')"
+            >
+                <i class="pi pi-exclamation-triangle"></i>
+                <span>{{ stats.lowStock }} producto(s) con stock crítico requieren reposición.</span>
+                <i class="pi pi-arrow-right text-xs"></i>
+            </div>
+        </div>
+
+        <!-- TARJETAS DE MÉTRICAS / KPIS -->
         <div class="grid mb-4">
             <!-- Ventas Totales -->
             <div class="col-12 sm:col-6 md:col-4 xl:col">
@@ -296,7 +450,10 @@ onMounted(() => {
                     <div>
                         <span class="text-xs text-500 font-bold uppercase block mb-1">Ventas Totales</span>
                         <Skeleton v-if="loading" width="6rem" height="1.8rem" />
-                        <span v-else class="text-2xl font-black text-900">{{ formatCurrency(stats.totalSales) }}</span>
+                        <template v-else>
+                            <span class="text-2xl font-black text-900 block">{{ formatCurrency(stats.totalSales) }}</span>
+                            <span class="text-xs text-500">Ticket prom: {{ formatCurrency(stats.averageTicket) }}</span>
+                        </template>
                     </div>
                     <div class="border-round p-3 flex align-items-center justify-content-center bg-blue-100 text-blue-700">
                         <i class="pi pi-dollar text-xl"></i>
@@ -323,7 +480,7 @@ onMounted(() => {
 
             <!-- Pedidos Pendientes -->
             <div class="col-12 sm:col-6 md:col-4 xl:col">
-                <div 
+                <div
                     class="surface-card p-3 border-round-xl shadow-1 flex justify-content-between align-items-center h-full cursor-pointer hover:shadow-2 transition-duration-150"
                     @click="router.push('/admin/orders')"
                 >
@@ -340,7 +497,7 @@ onMounted(() => {
 
             <!-- Stock Crítico -->
             <div class="col-12 sm:col-6 md:col-4 xl:col">
-                <div 
+                <div
                     class="surface-card p-3 border-round-xl shadow-1 flex justify-content-between align-items-center h-full cursor-pointer hover:shadow-2 transition-duration-150"
                     @click="router.push('/admin/inventory-stock')"
                 >
@@ -359,14 +516,17 @@ onMounted(() => {
 
             <!-- Valorización de Inventario -->
             <div class="col-12 sm:col-6 md:col-4 xl:col">
-                <div 
+                <div
                     class="surface-card p-3 border-round-xl shadow-1 flex justify-content-between align-items-center h-full cursor-pointer hover:shadow-2 transition-duration-150"
                     @click="router.push('/admin/inventory-stock')"
                 >
                     <div>
                         <span class="text-xs text-500 font-bold uppercase block mb-1">Valor de Inventario</span>
                         <Skeleton v-if="loading" width="6rem" height="1.8rem" />
-                        <span v-else class="text-2xl font-black text-900">{{ formatCurrency(stats.inventoryValue) }}</span>
+                        <template v-else>
+                            <span class="text-2xl font-black text-900 block">{{ formatCurrency(stats.inventoryValue) }}</span>
+                            <span v-if="stats.totalProducts" class="text-xs text-500">{{ stats.totalProducts }} productos</span>
+                        </template>
                     </div>
                     <div class="border-round p-3 flex align-items-center justify-content-center bg-green-100 text-green-700">
                         <i class="pi pi-box text-xl"></i>
@@ -395,10 +555,16 @@ onMounted(() => {
                 <div class="surface-card p-4 border-round-xl shadow-1">
                     <div class="flex justify-content-between align-items-center mb-3">
                         <h3 class="text-lg font-bold text-900 m-0">Canales de Venta</h3>
-                        <span class="text-xs text-500 font-medium">Distribución por origen</span>
+                        <span class="text-xs text-500 font-medium">Participación % por origen</span>
                     </div>
                     <div style="height: 280px;">
-                        <Chart type="doughnut" :data="channelChartData" :options="channelChartOptions" class="h-full" />
+                        <Chart
+                            type="doughnut"
+                            :data="channelChartData"
+                            :options="channelChartOptions"
+                            :plugins="[doughnutPercentagePlugin]"
+                            class="h-full"
+                        />
                     </div>
                 </div>
             </div>
@@ -449,20 +615,28 @@ onMounted(() => {
                         <Column field="id" header="N° Orden">
                             <template #body="slotProps">
                                 <span class="font-mono text-xs font-bold text-900">
-                                    #{{ String(slotProps.data.id).padStart(5, '0') }}
+                                    {{ slotProps.data.code || `#${String(slotProps.data.id).padStart(5, '0')}` }}
                                 </span>
                             </template>
                         </Column>
 
                         <Column field="created_at" header="Fecha">
                             <template #body="slotProps">
-                                <span class="text-xs text-600">{{ formatDate(slotProps.data.created_at) }}</span>
+                                <span class="text-xs text-600">{{ formatDate(slotProps.data.order_date || slotProps.data.created_at) }}</span>
                             </template>
                         </Column>
 
-                        <Column field="customer.name" header="Cliente">
+                        <Column field="customer.name" header="Cliente / Canal">
                             <template #body="slotProps">
-                                <span class="font-medium text-800">{{ slotProps.data.customer?.name || 'Cliente Web' }}</span>
+                                <div class="flex align-items-center gap-2">
+                                    <span class="font-medium text-800">{{ getCustomerName(slotProps.data) }}</span>
+                                    <span
+                                        class="text-xs font-semibold px-2 py-0 border-round"
+                                        :class="slotProps.data.channel === 'POS' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'"
+                                    >
+                                        {{ slotProps.data.channel || 'WEB' }}
+                                    </span>
+                                </div>
                             </template>
                         </Column>
 
@@ -474,9 +648,9 @@ onMounted(() => {
 
                         <Column field="status" header="Estado">
                             <template #body="slotProps">
-                                <Tag 
-                                    :value="slotProps.data.status || 'PENDIENTE'" 
-                                    :severity="getStatusSeverity(slotProps.data.status)" 
+                                <Tag
+                                    :value="getStatusLabel(slotProps.data.status)"
+                                    :severity="getStatusSeverity(slotProps.data.status)"
                                 />
                             </template>
                         </Column>
