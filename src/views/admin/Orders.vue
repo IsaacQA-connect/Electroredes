@@ -68,7 +68,7 @@ const getCustomerDoc = (order) => {
 
 const formatPaymentMethod = (payment) => {
     const raw = payment?.method_label || payment?.method || 'Efectivo';
-    if (raw.trim().toLowerCase() === 'yape/plin') {
+    if (raw.trim().toLowerCase() === 'Yape/Plin') {
         return 'Yape';
     }
     return raw;
@@ -186,44 +186,141 @@ const updateOrderStatus = async () => {
 };
 
 // Imprimir / Descargar comprobante electrónico o ticket
-const printInvoice = async (order) => {
-    isPrinting.value = true;
-    try {
-        // Intento de obtener PDF o abrir ventana de impresión estándar
-        const response = await api.get(`/orders/${order.id}/pdf`, { responseType: 'blob' });
-        const blob = new Blob([response.data], { type: 'application/pdf' });
-        const url = window.URL.createObjectURL(blob);
-        window.open(url, '_blank');
-    } catch (err) {
-        // Fallback: Disparar la vista de impresión del navegador si no hay endpoint PDF
-        window.print();
-    } finally {
-        isPrinting.value = false;
-    }
-};
+const printInvoice = (order) => {
+    if (!order) return;
 
-const formatCurrency = (val) => {
-    return new Intl.NumberFormat('es-PE', {
-        style: 'currency',
-        currency: 'PEN',
-        minimumFractionDigits: 2
-    }).format(Number(val) || 0);
-};
-
-const getStatusSeverity = (status) => {
-    switch (status?.toUpperCase()) {
-        case 'COMPLETED':
-        case 'COMPLETADO':
-            return 'success';
-        case 'PENDING':
-        case 'PENDIENTE':
-            return 'warn';
-        case 'CANCELLED':
-        case 'CANCELADO':
-            return 'danger';
-        default:
-            return 'info';
+    // 1. Si SUNAT/APIsPERU ya generó el PDF oficial, abrirlo directo
+    const directPdf = order.pdf_url || order.invoice?.pdf_url;
+    if (directPdf) {
+        window.open(directPdf, '_blank');
+        return;
     }
+
+    // 2. Generar Ticket / Comprobante interno limpio en ventana aparte
+    const printWindow = window.open('', '_blank', 'width=400,height=650');
+    if (!printWindow) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Ventana bloqueada',
+            detail: 'Permite las ventanas emergentes en tu navegador para imprimir el ticket.',
+            life: 4000
+        });
+        return;
+    }
+
+    const items = order.details || order.items || [];
+    const total = Number(order.total) || 0;
+    const subtotal = total / 1.18;
+    const igv = total - subtotal;
+    const doc = getCustomerDoc(order);
+    const correlative = getInvoiceCorrelative(order);
+
+    const itemsHtml = items.map(item => {
+        const qty = Number(item.quantity);
+        const unit = Number(item.unit_price || item.price || 0);
+        const lineTotal = Number(item.subtotal || qty * unit);
+        const name = item.product?.name || item.name || 'Producto';
+        return `
+            <tr>
+                <td style="padding: 4px 0;">
+                    <div>${name}</div>
+                    <small style="color: #555;">${qty} x ${formatCurrency(unit)}</small>
+                </td>
+                <td style="text-align: right; vertical-align: top; padding: 4px 0; font-weight: bold;">
+                    ${formatCurrency(lineTotal)}
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8" />
+            <title>Comprobante ${order.code || '#' + order.id}</title>
+            <style>
+                body {
+                    font-family: 'Courier New', Courier, monospace;
+                    width: 290px;
+                    margin: 0 auto;
+                    padding: 12px;
+                    color: #111;
+                    font-size: 12px;
+                }
+                .center { text-align: center; }
+                .bold { font-weight: bold; }
+                .divider { border-top: 1px dashed #333; margin: 8px 0; }
+                table { width: 100%; border-collapse: collapse; }
+                @media print {
+                    body { width: 100%; margin: 0; padding: 0; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="center">
+                <div class="bold" style="font-size: 15px;">ELECTROREDES</div>
+                <div>${order.invoice_type || 'BOLETA DE VENTA'}</div>
+                <div class="bold">${correlative || order.code || 'ORDEN #' + String(order.id).padStart(5, '0')}</div>
+                <small>${formatDate(order.order_date || order.created_at)}</small>
+            </div>
+
+            <div class="divider"></div>
+
+            <div>
+                <div><span class="bold">Cliente:</span> ${getCustomerName(order)}</div>
+                ${doc ? `<div><span class="bold">Doc:</span> ${doc}</div>` : ''}
+                <div><span class="bold">Canal:</span> ${order.channel || 'WEB'}</div>
+                <div><span class="bold">Pago:</span> ${getPaymentSummary(order)}</div>
+                ${order.notes ? `<div style="margin-top: 4px;"><span class="bold">Entrega:</span> ${order.notes}</div>` : ''}
+            </div>
+
+            <div class="divider"></div>
+
+            <table>
+                <thead>
+                    <tr style="border-bottom: 1px solid #333;">
+                        <th style="text-align: left; padding-bottom: 4px;">Descripción</th>
+                        <th style="text-align: right; padding-bottom: 4px;">Importe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${itemsHtml}
+                </tbody>
+            </table>
+
+            <div class="divider"></div>
+
+            <table>
+                <tr>
+                    <td>Op. Gravada:</td>
+                    <td style="text-align: right;">${formatCurrency(subtotal)}</td>
+                </tr>
+                <tr>
+                    <td>IGV (18%):</td>
+                    <td style="text-align: right;">${formatCurrency(igv)}</td>
+                </tr>
+                <tr class="bold" style="font-size: 14px;">
+                    <td style="padding-top: 4px;">TOTAL:</td>
+                    <td style="text-align: right; padding-top: 4px;">${formatCurrency(total)}</td>
+                </tr>
+            </table>
+
+            <div class="divider"></div>
+            <div class="center" style="margin-top: 8px;">
+                <small>¡Gracias por su preferencia!</small>
+            </div>
+
+            <script>
+                window.onload = function() {
+                    window.print();
+                    window.onafterprint = function() { window.close(); };
+                };
+            <\/script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
 };
 
 const getStatusLabel = (status) => {
