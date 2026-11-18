@@ -18,6 +18,7 @@ const loading = ref(true);
 const orders = ref([]);
 const searchQuery = ref('');
 const statusFilter = ref('ALL');
+const channelFilter = ref('ALL');
 
 const detailDialog = ref(false);
 const statusDialog = ref(false);
@@ -39,14 +40,59 @@ const filterStatusOptions = [
     { label: 'Cancelados', value: 'CANCELLED' }
 ];
 
+const filterChannelOptions = [
+    { label: 'Todos los canales', value: 'ALL' },
+    { label: 'Tienda Web', value: 'WEB' },
+    { label: 'Punto de Venta (POS)', value: 'POS' }
+];
+
+// Helpers de extracción según estructura de /orders
+const getCustomerName = (order) => {
+    if (!order) return '';
+    return (
+        order.customer?.name ||
+        order.business_name ||
+        (order.channel === 'POS' ? 'Cliente POS' : 'Cliente Web')
+    );
+};
+
+const getCustomerDoc = (order) => {
+    if (!order) return '';
+    return (
+        order.customer?.document_number ||
+        order.customer?.document ||
+        order.document_number ||
+        ''
+    );
+};
+
+const getPaymentSummary = (order) => {
+    const payments = order?.payments || [];
+    if (payments.length === 0) {
+        return order?.payment_method || 'Sin pago registrado';
+    }
+    if (payments.length === 1) {
+        return payments[0].method_label || payments[0].method || 'Efectivo';
+    }
+    return payments.map(p => p.method_label || p.method).join(' + ');
+};
+
+const getInvoiceCorrelative = (order) => {
+    return order?.invoice_number || order?.invoice?.number || order?.invoice?.correlative || null;
+};
+
 // Cargar pedidos desde la API
 const fetchOrders = async () => {
     loading.value = true;
     try {
         const response = await api.get('/orders');
         const rawOrders = response.data.data || response.data || [];
-        
-        orders.value = rawOrders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at) || b.id - a.id);
+
+        orders.value = rawOrders.sort((a, b) => {
+            const dateA = new Date(a.order_date || a.created_at?.replace(' ', 'T'));
+            const dateB = new Date(b.order_date || b.created_at?.replace(' ', 'T'));
+            return dateB - dateA || b.id - a.id;
+        });
     } catch (error) {
         console.error('Error al cargar pedidos:', error);
         toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudieron obtener los pedidos.', life: 4000 });
@@ -55,41 +101,54 @@ const fetchOrders = async () => {
     }
 };
 
-// Métricas Dinámicas para la Cabecera
-const pendingCount = computed(() => orders.value.filter(o => ['PENDING', 'PENDIENTE'].includes(o.status?.toUpperCase())).length);
-const completedCount = computed(() => orders.value.filter(o => ['COMPLETED', 'COMPLETADO'].includes(o.status?.toUpperCase())).length);
-const totalSalesAmount = computed(() => orders.value.reduce((acc, o) => acc + (Number(o.total) || 0), 0));
+// Métricas Dinámicas para la Cabecera (excluye cancelados del monto acumulado)
+const pendingCount = computed(() =>
+    orders.value.filter(o => ['PENDING', 'PENDIENTE'].includes(o.status?.toUpperCase())).length
+);
+const completedCount = computed(() =>
+    orders.value.filter(o => ['COMPLETED', 'COMPLETADO'].includes(o.status?.toUpperCase())).length
+);
+const totalSalesAmount = computed(() =>
+    orders.value
+        .filter(o => !['CANCELLED', 'CANCELADO'].includes(o.status?.toUpperCase()))
+        .reduce((acc, o) => acc + (Number(o.total) || 0), 0)
+);
 
-// Filtrado Reactivo por Búsqueda Texto y Estado
+// Filtrado Reactivo por Búsqueda, Estado y Canal
 const filteredOrders = computed(() => {
     return orders.value.filter(o => {
-        // Filtro por Estado
         const matchesStatus = statusFilter.value === 'ALL' || o.status?.toUpperCase() === statusFilter.value;
+        const matchesChannel = channelFilter.value === 'ALL' || (o.channel || 'WEB').toUpperCase() === channelFilter.value;
 
-        // Filtro por Búsqueda Texto
-        if (!searchQuery.value.trim()) return matchesStatus;
+        if (!matchesStatus || !matchesChannel) return false;
+        if (!searchQuery.value.trim()) return true;
 
-        const query = searchQuery.value.toLowerCase();
-        const matchesText = 
+        const query = searchQuery.value.toLowerCase().trim();
+        const customerName = getCustomerName(o).toLowerCase();
+        const customerDoc = getCustomerDoc(o).toLowerCase();
+        const invoiceNum = (getInvoiceCorrelative(o) || '').toLowerCase();
+
+        return (
             String(o.id).includes(query) ||
             (o.code && o.code.toLowerCase().includes(query)) ||
-            (o.customer?.name && o.customer.name.toLowerCase().includes(query)) ||
-            (o.customer?.document && o.customer.document.includes(query)) ||
-            getStatusLabel(o.status).toLowerCase().includes(query);
-
-        return matchesStatus && matchesText;
+            customerName.includes(query) ||
+            customerDoc.includes(query) ||
+            invoiceNum.includes(query) ||
+            getStatusLabel(o.status).toLowerCase().includes(query)
+        );
     });
 });
 
 // Ver Detalle Completo de la Orden
 const viewOrderDetails = async (order) => {
+    selectedOrder.value = order;
+    detailDialog.value = true;
     try {
         const res = await api.get(`/orders/${order.id}`);
         selectedOrder.value = res.data.data || res.data || order;
     } catch (err) {
-        selectedOrder.value = order;
+        // Mantiene la orden cargada de la tabla si falla el detalle individual
     }
-    detailDialog.value = true;
 };
 
 // Abrir Modal de Cambio de Estado
@@ -117,24 +176,31 @@ const updateOrderStatus = async () => {
     }
 };
 
-// Función para imprimir / descargar comprobante de compra
+// Imprimir / Descargar comprobante electrónico o ticket
 const printInvoice = async (order) => {
+    if (!order) return;
+
+    // 1. Si SUNAT/APIsPERU ya generó URL directa del PDF, abrirla
+    const directPdf = order.pdf_url || order.invoice?.pdf_url;
+    if (directPdf) {
+        window.open(directPdf, '_blank');
+        return;
+    }
+
+    // 2. Intentar descargar PDF desde el backend
     isPrinting.value = true;
     try {
-        // Intento de obtener PDF o abrir ventana de impresión estándar
         const response = await api.get(`/orders/${order.id}/pdf`, { responseType: 'blob' });
         const blob = new Blob([response.data], { type: 'application/pdf' });
         const url = window.URL.createObjectURL(blob);
         window.open(url, '_blank');
     } catch (err) {
-        // Fallback: Disparar la vista de impresión del navegador si no hay endpoint PDF
         window.print();
     } finally {
         isPrinting.value = false;
     }
 };
 
-// Formateador oficial de Moneda Peruana (S/)
 const formatCurrency = (val) => {
     return new Intl.NumberFormat('es-PE', {
         style: 'currency',
@@ -146,15 +212,15 @@ const formatCurrency = (val) => {
 const getStatusSeverity = (status) => {
     switch (status?.toUpperCase()) {
         case 'COMPLETED':
-        case 'COMPLETADO': 
+        case 'COMPLETADO':
             return 'success';
         case 'PENDING':
-        case 'PENDIENTE': 
+        case 'PENDIENTE':
             return 'warn';
         case 'CANCELLED':
-        case 'CANCELADO': 
+        case 'CANCELADO':
             return 'danger';
-        default: 
+        default:
             return 'info';
     }
 };
@@ -173,7 +239,8 @@ const getStatusLabel = (status) => {
 
 const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleString('es-PE', {
+    const normalized = typeof dateString === 'string' ? dateString.replace(' ', 'T') : dateString;
+    return new Date(normalized).toLocaleString('es-PE', {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -193,7 +260,7 @@ onMounted(() => {
         <div class="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
             <div>
                 <h2 class="text-3xl font-black text-900 m-0">Gestión de Pedidos</h2>
-                <p class="text-500 text-sm m-0">Administra, filtra y gestiona los estados de las órdenes de compra</p>
+                <p class="text-500 text-sm m-0">Administra, filtra y gestiona las ventas de Tienda Web y Punto de Venta (POS)</p>
             </div>
             <Button 
                 icon="pi pi-refresh" 
@@ -246,7 +313,7 @@ onMounted(() => {
             <div class="col-12 sm:col-6 md:col-3">
                 <div class="surface-card p-3 border-round-xl shadow-1 flex justify-content-between align-items-center">
                     <div>
-                        <span class="text-xs text-500 font-bold uppercase block mb-1">Monto Acumulado</span>
+                        <span class="text-xs text-500 font-bold uppercase block mb-1">Ventas Válidas</span>
                         <span class="text-2xl font-black text-900">{{ formatCurrency(totalSalesAmount) }}</span>
                     </div>
                     <div class="border-round p-3 bg-green-100 text-green-700">
@@ -258,27 +325,40 @@ onMounted(() => {
 
         <!-- TABLA Y FILTROS -->
         <div class="surface-card p-4 border-round-xl shadow-1">
-            <div class="flex flex-column sm:flex-row justify-content-between align-items-stretch sm:align-items-center gap-3 mb-4">
+            <div class="flex flex-column lg:flex-row justify-content-between align-items-stretch lg:align-items-center gap-3 mb-4">
                 <!-- Buscador de Texto -->
-                <IconField iconPosition="left" class="w-full sm:w-20rem">
+                <IconField iconPosition="left" class="w-full lg:w-22rem">
                     <InputIcon class="pi pi-search" />
                     <InputText 
                         v-model="searchQuery" 
-                        placeholder="Buscar por N° orden, cliente o DNI/RUC..." 
+                        placeholder="Buscar N° orden, comprobante, cliente o DNI/RUC..." 
                         class="p-inputtext-sm w-full" 
                     />
                 </IconField>
 
-                <!-- Filtro por Estado -->
-                <div class="flex align-items-center gap-2">
-                    <span class="text-xs font-bold text-600 uppercase">Estado:</span>
-                    <Select 
-                        v-model="statusFilter" 
-                        :options="filterStatusOptions" 
-                        optionLabel="label" 
-                        optionValue="value" 
-                        class="p-inputtext-sm w-12rem" 
-                    />
+                <!-- Filtros por Canal y Estado -->
+                <div class="flex flex-wrap align-items-center gap-3">
+                    <div class="flex align-items-center gap-2">
+                        <span class="text-xs font-bold text-600 uppercase">Canal:</span>
+                        <Select 
+                            v-model="channelFilter" 
+                            :options="filterChannelOptions" 
+                            optionLabel="label" 
+                            optionValue="value" 
+                            class="p-inputtext-sm w-12rem" 
+                        />
+                    </div>
+
+                    <div class="flex align-items-center gap-2">
+                        <span class="text-xs font-bold text-600 uppercase">Estado:</span>
+                        <Select 
+                            v-model="statusFilter" 
+                            :options="filterStatusOptions" 
+                            optionLabel="label" 
+                            optionValue="value" 
+                            class="p-inputtext-sm w-12rem" 
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -306,16 +386,12 @@ onMounted(() => {
                     </template>
                 </Column>
 
-                <Column field="customer.name" header="Cliente" sortable>
+                <Column field="customer.name" header="Cliente / Canal" sortable>
                     <template #body="slotProps">
                         <div class="flex flex-column gap-1">
                             <div class="flex align-items-center gap-2">
                                 <span class="font-bold text-900">
-                                    {{
-                                        slotProps.data.customer?.name ||
-                                        slotProps.data.business_name ||
-                                        (slotProps.data.channel === 'POS' ? 'Cliente POS' : 'Cliente Web')
-                                    }}
+                                    {{ getCustomerName(slotProps.data) }}
                                 </span>
                                 <span
                                     class="text-xs font-semibold px-2 py-0 border-round"
@@ -324,26 +400,41 @@ onMounted(() => {
                                     {{ slotProps.data.channel || 'WEB' }}
                                 </span>
                             </div>
-                            <span
-                                class="text-xs text-500"
-                                v-if="slotProps.data.customer?.document_number || slotProps.data.customer?.document || slotProps.data.document_number"
-                            >
-                                Doc: {{ slotProps.data.customer?.document_number || slotProps.data.customer?.document || slotProps.data.document_number }}
+                            <span class="text-xs text-500" v-if="getCustomerDoc(slotProps.data)">
+                                Doc: {{ getCustomerDoc(slotProps.data) }}
                             </span>
                         </div>
                     </template>
                 </Column>
 
-                <Column field="created_at" header="Fecha y Hora" sortable>
+                <Column field="invoice_type" header="Comprobante">
                     <template #body="slotProps">
-                        <span class="text-xs text-600">{{ formatDate(slotProps.data.created_at) }}</span>
+                        <div class="flex flex-column">
+                            <span class="text-xs font-bold text-800">
+                                {{ slotProps.data.invoice_type || 'BOLETA' }}
+                            </span>
+                            <span class="font-mono text-xs text-600" v-if="getInvoiceCorrelative(slotProps.data)">
+                                {{ getInvoiceCorrelative(slotProps.data) }}
+                            </span>
+                            <span class="text-xs text-400" v-else>
+                                Sin correlativo
+                            </span>
+                        </div>
                     </template>
                 </Column>
 
-                <Column field="payment_method" header="Método Pago">
+                <Column field="order_date" header="Fecha y Hora" sortable>
+                    <template #body="slotProps">
+                        <span class="text-xs text-600">
+                            {{ formatDate(slotProps.data.order_date || slotProps.data.created_at) }}
+                        </span>
+                    </template>
+                </Column>
+
+                <Column header="Método Pago">
                     <template #body="slotProps">
                         <span class="text-xs font-semibold uppercase px-2 py-1 surface-100 border-round text-700">
-                            {{ slotProps.data.payment_method || 'Efectivo / Transferencia' }}
+                            {{ getPaymentSummary(slotProps.data) }}
                         </span>
                     </template>
                 </Column>
@@ -402,7 +493,7 @@ onMounted(() => {
             header="Detalle del Pedido" 
             modal 
             class="p-fluid"
-            :style="{ width: '90vw', maxWidth: '600px' }"
+            :style="{ width: '90vw', maxWidth: '640px' }"
         >
             <div v-if="selectedOrder" class="flex flex-column gap-3">
                 
@@ -410,9 +501,17 @@ onMounted(() => {
                 <div class="surface-100 p-3 border-round-lg flex justify-content-between align-items-center">
                     <div>
                         <span class="text-xs text-500 uppercase font-bold block">Código de Orden</span>
-                        <span class="font-mono font-bold text-xl text-900">
-                            {{ selectedOrder.code || `#${String(selectedOrder.id).padStart(5, '0')}` }}
-                        </span>
+                        <div class="flex align-items-center gap-2">
+                            <span class="font-mono font-bold text-xl text-900">
+                                {{ selectedOrder.code || `#${String(selectedOrder.id).padStart(5, '0')}` }}
+                            </span>
+                            <span
+                                class="text-xs font-semibold px-2 py-1 border-round"
+                                :class="selectedOrder.channel === 'POS' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'"
+                            >
+                                {{ selectedOrder.channel || 'WEB' }}
+                            </span>
+                        </div>
                     </div>
                     <div class="text-right">
                         <Tag 
@@ -420,28 +519,58 @@ onMounted(() => {
                             :severity="getStatusSeverity(selectedOrder.status)" 
                             class="mb-1" 
                         />
-                        <span class="text-xs text-500 block">{{ formatDate(selectedOrder.created_at) }}</span>
+                        <span class="text-xs text-500 block">
+                            {{ formatDate(selectedOrder.order_date || selectedOrder.created_at) }}
+                        </span>
                     </div>
                 </div>
 
-                <!-- Datos del Cliente y Pago -->
+                <!-- Datos del Cliente y Comprobante -->
                 <div class="grid surface-border border-bottom-1 pb-2">
                     <div class="col-12 sm:col-6">
                         <span class="text-xs text-500 uppercase font-bold block mb-1">Cliente</span>
-                        <span class="text-sm font-bold text-800 block">{{ selectedOrder.customer?.name || 'Cliente Web' }}</span>
-                        <span class="text-xs text-600 block" v-if="selectedOrder.customer?.document">
-                            Doc: {{ selectedOrder.customer.document }}
+                        <span class="text-sm font-bold text-800 block">
+                            {{ getCustomerName(selectedOrder) }}
+                        </span>
+                        <span class="text-xs text-600 block" v-if="getCustomerDoc(selectedOrder)">
+                            Doc: {{ getCustomerDoc(selectedOrder) }}
                         </span>
                     </div>
                     <div class="col-12 sm:col-6">
-                        <span class="text-xs text-500 uppercase font-bold block mb-1">Comprobante / Pago</span>
+                        <span class="text-xs text-500 uppercase font-bold block mb-1">Comprobante Electrónico</span>
                         <span class="text-sm font-semibold text-800 block">
-                            {{ selectedOrder.invoice_type || 'Boleta de Venta' }}
+                            {{ selectedOrder.invoice_type || 'BOLETA' }}
+                            <span v-if="getInvoiceCorrelative(selectedOrder)" class="font-mono text-primary ml-1">
+                                ({{ getInvoiceCorrelative(selectedOrder) }})
+                            </span>
                         </span>
-                        <span class="text-xs text-600 block">
-                            Método: {{ selectedOrder.payment_method || 'Efectivo / Transferencia' }}
-                        </span>
+                        <div class="flex gap-2 mt-1" v-if="selectedOrder.pdf_url || selectedOrder.xml_url">
+                            <a 
+                                v-if="selectedOrder.pdf_url" 
+                                :href="selectedOrder.pdf_url" 
+                                target="_blank" 
+                                class="text-xs font-semibold text-red-600 no-underline"
+                            >
+                                <i class="pi pi-file-pdf mr-1"></i>PDF
+                            </a>
+                            <a 
+                                v-if="selectedOrder.xml_url" 
+                                :href="selectedOrder.xml_url" 
+                                target="_blank" 
+                                class="text-xs font-semibold text-blue-600 no-underline"
+                            >
+                                <i class="pi pi-code mr-1"></i>XML
+                            </a>
+                        </div>
                     </div>
+                </div>
+
+                <!-- Notas / Dirección de Entrega (para pedidos WEB) -->
+                <div v-if="selectedOrder.notes" class="p-3 border-round bg-blue-50 text-blue-900 text-sm">
+                    <span class="text-xs font-bold uppercase block mb-1">
+                        <i class="pi pi-map-marker mr-1"></i>Datos de Entrega / Notas
+                    </span>
+                    <span>{{ selectedOrder.notes }}</span>
                 </div>
 
                 <!-- Lista de Productos Comprados -->
@@ -450,28 +579,56 @@ onMounted(() => {
                     <div class="border-1 surface-border border-round p-2 max-h-14rem overflow-y-auto">
                         <ul class="list-none p-0 m-0 flex flex-column gap-2">
                             <li 
-                                v-for="item in (selectedOrder.items || selectedOrder.details || [])" 
+                                v-for="item in (selectedOrder.details || selectedOrder.items || [])" 
                                 :key="item.id" 
                                 class="flex justify-content-between align-items-center text-sm py-2 border-bottom-1 surface-border last:border-none"
                             >
                                 <div class="flex flex-column">
-                                    <span class="font-bold text-800">{{ item.product?.name || item.name || 'Producto' }}</span>
+                                    <span class="font-bold text-800">
+                                        {{ item.product?.name || item.name || 'Producto' }}
+                                    </span>
                                     <span class="text-xs text-500">
-                                        Cant: {{ item.quantity }} x {{ formatCurrency(item.price || item.unit_price) }}
+                                        <span v-if="item.product?.code" class="font-mono mr-2">[{{ item.product.code }}]</span>
+                                        Cant: {{ Number(item.quantity) }} x {{ formatCurrency(item.unit_price || item.price) }}
                                     </span>
                                 </div>
                                 <span class="font-bold text-900">
-                                    {{ formatCurrency(Number(item.quantity) * Number(item.price || item.unit_price || 0)) }}
+                                    {{ formatCurrency(item.subtotal || (Number(item.quantity) * Number(item.unit_price || item.price || 0))) }}
                                 </span>
                             </li>
                         </ul>
                     </div>
                 </div>
 
+                <!-- Desglose de Pagos Registrados -->
+                <div v-if="selectedOrder.payments && selectedOrder.payments.length > 0">
+                    <span class="text-xs text-500 uppercase font-bold block mb-2">Pagos Registrados</span>
+                    <div class="flex flex-column gap-2">
+                        <div 
+                            v-for="pay in selectedOrder.payments" 
+                            :key="pay.id"
+                            class="surface-100 px-3 py-2 border-round flex justify-content-between align-items-center text-sm"
+                        >
+                            <div>
+                                <span class="font-bold text-800">{{ pay.method_label || pay.method }}</span>
+                                <span v-if="pay.transaction_code" class="text-xs text-600 ml-2 font-mono">
+                                    (Op: {{ pay.transaction_code }})
+                                </span>
+                                <span class="block text-xs text-500">{{ pay.status_label || pay.status }}</span>
+                            </div>
+                            <span class="font-bold text-900">{{ formatCurrency(pay.amount) }}</span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Resumen de Totales e IGV -->
                 <div class="surface-50 p-3 border-round-lg flex flex-column gap-1">
+                    <div v-if="Number(selectedOrder.discount) > 0" class="flex justify-content-between text-sm text-orange-600">
+                        <span>Descuento aplicado:</span>
+                        <span>- {{ formatCurrency(selectedOrder.discount) }}</span>
+                    </div>
                     <div class="flex justify-content-between text-sm text-600">
-                        <span>Subtotal:</span>
+                        <span>Op. Gravada (Subtotal):</span>
                         <span>{{ formatCurrency((Number(selectedOrder.total) || 0) / 1.18) }}</span>
                     </div>
                     <div class="flex justify-content-between text-sm text-600">
@@ -493,6 +650,7 @@ onMounted(() => {
                         icon="pi pi-print" 
                         severity="help" 
                         outlined 
+                        :loading="isPrinting"
                         @click="printInvoice(selectedOrder)" 
                     />
                     <Button 
