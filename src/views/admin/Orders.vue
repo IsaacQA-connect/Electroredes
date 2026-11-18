@@ -187,16 +187,20 @@ const updateOrderStatus = async () => {
 
 // Imprimir / Descargar comprobante electrónico o ticket
 const printInvoice = async (order) => {
+    if (!order) return;
     isPrinting.value = true;
     try {
-        // Intento de obtener PDF o abrir ventana de impresión estándar
         const response = await api.get(`/orders/${order.id}/pdf`, { responseType: 'blob' });
         const blob = new Blob([response.data], { type: 'application/pdf' });
         const url = window.URL.createObjectURL(blob);
         window.open(url, '_blank');
     } catch (err) {
-        // Fallback: Disparar la vista de impresión del navegador si no hay endpoint PDF
-        window.print();
+        toast.add({
+            severity: 'warn',
+            summary: 'Sin PDF disponible',
+            detail: 'Esta orden aún no tiene un comprobante PDF generado.',
+            life: 3500
+        });
     } finally {
         isPrinting.value = false;
     }
@@ -548,11 +552,11 @@ onMounted(() => {
                         <div class="flex gap-2 mt-1" v-if="selectedOrder.pdf_url || selectedOrder.xml_url">
                             <a 
                                 v-if="selectedOrder.pdf_url" 
-                                :href="selectedOrder.pdf_url" 
-                                target="_blank" 
+                                href="#" 
                                 class="text-xs font-semibold text-red-600 no-underline"
+                                @click.prevent="printInvoice(selectedOrder)"
                             >
-                                <i class="pi pi-file-pdf mr-1"></i>PDF
+                                <i class="pi pi-file-pdf mr-1"></i>Ver PDF
                             </a>
                             <a 
                                 v-if="selectedOrder.xml_url" 
