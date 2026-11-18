@@ -66,15 +66,24 @@ const getCustomerDoc = (order) => {
     );
 };
 
+const formatPaymentMethod = (payment) => {
+    const raw = payment?.method_label || payment?.method || 'Efectivo';
+    if (raw.trim().toLowerCase() === 'yape/plin') {
+        return 'Yape';
+    }
+    return raw;
+};
+
 const getPaymentSummary = (order) => {
     const payments = order?.payments || [];
     if (payments.length === 0) {
-        return order?.payment_method || 'Sin pago registrado';
+        const fallback = order?.payment_method || 'Sin pago registrado';
+        return fallback.trim().toLowerCase() === 'yape/plin' ? 'Yape' : fallback;
     }
     if (payments.length === 1) {
-        return payments[0].method_label || payments[0].method || 'Efectivo';
+        return formatPaymentMethod(payments[0]);
     }
-    return payments.map(p => p.method_label || p.method).join(' + ');
+    return payments.map(p => formatPaymentMethod(p)).join(' + ');
 };
 
 const getInvoiceCorrelative = (order) => {
@@ -178,23 +187,15 @@ const updateOrderStatus = async () => {
 
 // Imprimir / Descargar comprobante electrónico o ticket
 const printInvoice = async (order) => {
-    if (!order) return;
-
-    // 1. Si SUNAT/APIsPERU ya generó URL directa del PDF, abrirla
-    const directPdf = order.pdf_url || order.invoice?.pdf_url;
-    if (directPdf) {
-        window.open(directPdf, '_blank');
-        return;
-    }
-
-    // 2. Intentar descargar PDF desde el backend
     isPrinting.value = true;
     try {
+        // Intento de obtener PDF o abrir ventana de impresión estándar
         const response = await api.get(`/orders/${order.id}/pdf`, { responseType: 'blob' });
         const blob = new Blob([response.data], { type: 'application/pdf' });
         const url = window.URL.createObjectURL(blob);
         window.open(url, '_blank');
     } catch (err) {
+        // Fallback: Disparar la vista de impresión del navegador si no hay endpoint PDF
         window.print();
     } finally {
         isPrinting.value = false;
@@ -610,7 +611,7 @@ onMounted(() => {
                             class="surface-100 px-3 py-2 border-round flex justify-content-between align-items-center text-sm"
                         >
                             <div>
-                                <span class="font-bold text-800">{{ pay.method_label || pay.method }}</span>
+                                <span class="font-bold text-800">{{ formatPaymentMethod(pay) }}</span>
                                 <span v-if="pay.transaction_code" class="text-xs text-600 ml-2 font-mono">
                                     (Op: {{ pay.transaction_code }})
                                 </span>
