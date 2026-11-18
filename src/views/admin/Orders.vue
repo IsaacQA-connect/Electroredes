@@ -68,7 +68,7 @@ const getCustomerDoc = (order) => {
 
 const formatPaymentMethod = (payment) => {
     const raw = payment?.method_label || payment?.method || 'Efectivo';
-    if (raw.trim().toLowerCase() === 'Yape/Plin') {
+    if (raw.trim().toLowerCase() === 'yape/plin') {
         return 'Yape';
     }
     return raw;
@@ -187,6 +187,14 @@ const updateOrderStatus = async () => {
 
 // Imprimir / Descargar comprobante electrónico o ticket
 // Extrae "/invoices/44/pdf" sin importar si el JSON trae dominio, /api o /api/v1
+const getPdfUrl = (order) => {
+    return order?.pdf_url || order?.invoice?.pdf_url || null;
+};
+
+const getXmlUrl = (order) => {
+    return order?.xml_url || order?.invoice?.xml_url || null;
+};
+
 const normalizeInvoicePath = (rawUrl) => {
     if (!rawUrl) return null;
     const match = rawUrl.match(/(\/invoices\/.+)$/);
