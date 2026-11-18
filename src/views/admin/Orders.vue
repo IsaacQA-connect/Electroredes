@@ -186,46 +186,64 @@ const updateOrderStatus = async () => {
 };
 
 // Imprimir / Descargar comprobante electrónico o ticket
-const getPdfUrl = (order) => {
-    return order?.pdf_url || order?.invoice?.pdf_url || null;
-};
-
-const getXmlUrl = (order) => {
-    return order?.xml_url || order?.invoice?.xml_url || null;
+// Extrae "/invoices/44/pdf" sin importar si el JSON trae dominio, /api o /api/v1
+const normalizeInvoicePath = (rawUrl) => {
+    if (!rawUrl) return null;
+    const match = rawUrl.match(/(\/invoices\/.+)$/);
+    return match ? match[1] : rawUrl;
 };
 
 const printInvoice = async (order) => {
     if (!order) return;
 
-    const pdfUrl = getPdfUrl(order);
-    const cleanPdfUrl = pdfUrl?.startsWith('/api/') && api.defaults.baseURL?.endsWith('/api')
-        ? pdfUrl.replace(/^\/api/, '')
-        : pdfUrl;
+    const rawPdfUrl = getPdfUrl(order);
+    const normalizedPdfPath = normalizeInvoicePath(rawPdfUrl);
+    const invoiceId = order.invoice?.id || rawPdfUrl?.match(/\/invoices\/(\d+)/)?.[1];
+
+    // Prueba primero la ruta del JSON (/invoices/44/pdf) y si falla, stream-pdf o ticket
+    const endpoints = [
+        normalizedPdfPath,
+        invoiceId ? `/invoices/${invoiceId}/stream-pdf` : null,
+        invoiceId ? `/invoices/${invoiceId}/ticket` : null
+    ].filter(Boolean);
+
+    if (endpoints.length === 0) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Sin comprobante',
+            detail: 'Esta orden aún no tiene un comprobante electrónico emitido.',
+            life: 3500
+        });
+        return;
+    }
 
     isPrinting.value = true;
     try {
-        let response;
-        if (cleanPdfUrl) {
+        let blobData = null;
+
+        for (const path of endpoints) {
             try {
-                // 1. Intenta con pdf_url del JSON (/invoices/{id}/pdf)
-                response = await api.get(cleanPdfUrl, { responseType: 'blob' });
+                const response = await api.get(path, { responseType: 'blob' });
+                blobData = response.data;
+                break;
             } catch {
-                // 2. Si da 404 en producción, usa el endpoint de la orden que ya funciona
-                response = await api.get(`/orders/${order.id}/pdf`, { responseType: 'blob' });
+                // Si /pdf falla en APIsPeru, intenta con /stream-pdf o /ticket
             }
-        } else {
-            response = await api.get(`/orders/${order.id}/pdf`, { responseType: 'blob' });
         }
 
-        const blob = new Blob([response.data], { type: 'application/pdf' });
+        if (!blobData) {
+            throw new Error('No se pudo obtener el PDF');
+        }
+
+        const blob = new Blob([blobData], { type: 'application/pdf' });
         const blobUrl = window.URL.createObjectURL(blob);
         window.open(blobUrl, '_blank');
         setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
-    } catch (err) {
+    } catch {
         toast.add({
             severity: 'warn',
             summary: 'Comprobante no disponible',
-            detail: 'No se pudo obtener el PDF del comprobante.',
+            detail: 'No se pudo cargar el PDF del comprobante.',
             life: 3500
         });
     } finally {
@@ -234,15 +252,11 @@ const printInvoice = async (order) => {
 };
 
 const downloadXmlFile = async (order) => {
-    const xmlUrl = getXmlUrl(order);
-    if (!xmlUrl) return;
-
-    const cleanXmlUrl = xmlUrl.startsWith('/api/') && api.defaults.baseURL?.endsWith('/api')
-        ? xmlUrl.replace(/^\/api/, '')
-        : xmlUrl;
+    const normalizedXmlPath = normalizeInvoicePath(getXmlUrl(order));
+    if (!normalizedXmlPath) return;
 
     try {
-        const response = await api.get(cleanXmlUrl, { responseType: 'blob' });
+        const response = await api.get(normalizedXmlPath, { responseType: 'blob' });
         const blob = new Blob([response.data], { type: 'application/xml' });
         const blobUrl = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
