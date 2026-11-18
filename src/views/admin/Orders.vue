@@ -197,32 +197,66 @@ const getXmlUrl = (order) => {
 const printInvoice = async (order) => {
     if (!order) return;
 
-    // Toma la URL desde el JSON; si viene null, usa /orders/{id}/pdf
-    let targetUrl = getPdfUrl(order) || `/orders/${order.id}/pdf`;
-
-    // Evita duplicar /api si baseURL ya termina en /api y el JSON trae una ruta relativa /api/...
-    if (targetUrl.startsWith('/api/') && api.defaults.baseURL?.endsWith('/api')) {
-        targetUrl = targetUrl.replace(/^\/api/, '');
-    }
+    const pdfUrl = getPdfUrl(order);
+    const cleanPdfUrl = pdfUrl?.startsWith('/api/') && api.defaults.baseURL?.endsWith('/api')
+        ? pdfUrl.replace(/^\/api/, '')
+        : pdfUrl;
 
     isPrinting.value = true;
     try {
-        // Axios adjunta automáticamente el Bearer token en la petición
-        const response = await api.get(targetUrl, { responseType: 'blob' });
+        let response;
+        if (cleanPdfUrl) {
+            try {
+                // 1. Intenta con pdf_url del JSON (/invoices/{id}/pdf)
+                response = await api.get(cleanPdfUrl, { responseType: 'blob' });
+            } catch {
+                // 2. Si da 404 en producción, usa el endpoint de la orden que ya funciona
+                response = await api.get(`/orders/${order.id}/pdf`, { responseType: 'blob' });
+            }
+        } else {
+            response = await api.get(`/orders/${order.id}/pdf`, { responseType: 'blob' });
+        }
+
         const blob = new Blob([response.data], { type: 'application/pdf' });
         const blobUrl = window.URL.createObjectURL(blob);
-
         window.open(blobUrl, '_blank');
         setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
     } catch (err) {
         toast.add({
             severity: 'warn',
             summary: 'Comprobante no disponible',
-            detail: 'No se pudo cargar el PDF del comprobante.',
+            detail: 'No se pudo obtener el PDF del comprobante.',
             life: 3500
         });
     } finally {
         isPrinting.value = false;
+    }
+};
+
+const downloadXmlFile = async (order) => {
+    const xmlUrl = getXmlUrl(order);
+    if (!xmlUrl) return;
+
+    const cleanXmlUrl = xmlUrl.startsWith('/api/') && api.defaults.baseURL?.endsWith('/api')
+        ? xmlUrl.replace(/^\/api/, '')
+        : xmlUrl;
+
+    try {
+        const response = await api.get(cleanXmlUrl, { responseType: 'blob' });
+        const blob = new Blob([response.data], { type: 'application/xml' });
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = `${getInvoiceCorrelative(order) || 'comprobante-' + order.id}.xml`;
+        link.click();
+        window.URL.revokeObjectURL(blobUrl);
+    } catch {
+        toast.add({
+            severity: 'warn',
+            summary: 'XML no disponible',
+            detail: 'No se pudo descargar el archivo XML.',
+            life: 3500
+        });
     }
 };
 
@@ -580,9 +614,9 @@ onMounted(() => {
                             </a>
                             <a 
                                 v-if="getXmlUrl(selectedOrder)" 
-                                :href="getXmlUrl(selectedOrder)" 
-                                target="_blank" 
+                                href="#" 
                                 class="text-xs font-semibold text-blue-600 no-underline"
+                                @click.prevent="downloadXmlFile(selectedOrder)"
                             >
                                 <i class="pi pi-code mr-1"></i>Ver XML
                             </a>
