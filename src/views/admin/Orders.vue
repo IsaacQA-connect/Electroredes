@@ -67,11 +67,27 @@ const getCustomerDoc = (order) => {
 };
 
 const formatPaymentMethod = (payment) => {
-    const raw = payment?.method_label || payment?.method || 'Efectivo';
-    if (raw.trim().toLowerCase() === 'yape/plin') {
+    const method = (payment?.method || '').trim();
+    const label = (payment?.method_label || '').trim();
+
+    if (method.toLowerCase() === 'yape/plin' || label.toLowerCase() === 'yape/plin') {
         return 'Yape';
     }
-    return raw;
+
+    if (label && label.toLowerCase() !== 'desconocido') {
+        return label;
+    }
+
+    const fallbacks = {
+        CASH: 'Efectivo',
+        ONLINE_PAYMENT: 'Pago en Línea',
+        BANK_TRANSFER: 'Transferencia Bancaria',
+        CARD: 'Tarjeta',
+        YAPE: 'Yape',
+        PLIN: 'Plin'
+    };
+
+    return fallbacks[method.toUpperCase()] || method || 'Efectivo';
 };
 
 const getPaymentSummary = (order) => {
