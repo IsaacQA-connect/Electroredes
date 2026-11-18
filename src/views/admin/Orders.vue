@@ -308,10 +308,27 @@ onMounted(() => {
 
                 <Column field="customer.name" header="Cliente" sortable>
                     <template #body="slotProps">
-                        <div class="flex flex-column">
-                            <span class="font-bold text-900">{{ slotProps.data.customer?.name || 'Cliente Web' }}</span>
-                            <span class="text-xs text-500" v-if="slotProps.data.customer?.document">
-                                Doc: {{ slotProps.data.customer.document }}
+                        <div class="flex flex-column gap-1">
+                            <div class="flex align-items-center gap-2">
+                                <span class="font-bold text-900">
+                                    {{
+                                        slotProps.data.customer?.name ||
+                                        slotProps.data.business_name ||
+                                        (slotProps.data.channel === 'POS' ? 'Cliente POS' : 'Cliente Web')
+                                    }}
+                                </span>
+                                <span
+                                    class="text-xs font-semibold px-2 py-0 border-round"
+                                    :class="slotProps.data.channel === 'POS' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'"
+                                >
+                                    {{ slotProps.data.channel || 'WEB' }}
+                                </span>
+                            </div>
+                            <span
+                                class="text-xs text-500"
+                                v-if="slotProps.data.customer?.document_number || slotProps.data.customer?.document || slotProps.data.document_number"
+                            >
+                                Doc: {{ slotProps.data.customer?.document_number || slotProps.data.customer?.document || slotProps.data.document_number }}
                             </span>
                         </div>
                     </template>
