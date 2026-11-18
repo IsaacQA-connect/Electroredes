@@ -83,8 +83,7 @@ const formatPaymentMethod = (payment) => {
         ONLINE_PAYMENT: 'Pago en Línea',
         BANK_TRANSFER: 'Transferencia Bancaria',
         CARD: 'Tarjeta',
-        YAPE: 'Yape',
-        PLIN: 'Plin'
+        YAPE: 'Yape'
     };
 
     return fallbacks[method.toUpperCase()] || method || 'Efectivo';
