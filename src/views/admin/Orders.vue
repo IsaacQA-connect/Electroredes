@@ -197,25 +197,28 @@ const getXmlUrl = (order) => {
 const printInvoice = async (order) => {
     if (!order) return;
 
-    // 1. Toma directamente la URL del JSON (order.pdf_url o order.invoice.pdf_url)
-    const pdfUrl = getPdfUrl(order);
-    if (pdfUrl) {
-        window.open(pdfUrl, '_blank');
-        return;
+    // Toma la URL desde el JSON; si viene null, usa /orders/{id}/pdf
+    let targetUrl = getPdfUrl(order) || `/orders/${order.id}/pdf`;
+
+    // Evita duplicar /api si baseURL ya termina en /api y el JSON trae una ruta relativa /api/...
+    if (targetUrl.startsWith('/api/') && api.defaults.baseURL?.endsWith('/api')) {
+        targetUrl = targetUrl.replace(/^\/api/, '');
     }
 
-    // 2. Respaldo si en el JSON pdf_url viene en null
     isPrinting.value = true;
     try {
-        const response = await api.get(`/orders/${order.id}/pdf`, { responseType: 'blob' });
+        // Axios adjunta automáticamente el Bearer token en la petición
+        const response = await api.get(targetUrl, { responseType: 'blob' });
         const blob = new Blob([response.data], { type: 'application/pdf' });
-        const url = window.URL.createObjectURL(blob);
-        window.open(url, '_blank');
+        const blobUrl = window.URL.createObjectURL(blob);
+
+        window.open(blobUrl, '_blank');
+        setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
     } catch (err) {
         toast.add({
             severity: 'warn',
-            summary: 'Sin comprobante PDF',
-            detail: 'Esta orden aún no tiene un PDF generado en el sistema.',
+            summary: 'Comprobante no disponible',
+            detail: 'No se pudo cargar el PDF del comprobante.',
             life: 3500
         });
     } finally {
@@ -569,9 +572,9 @@ onMounted(() => {
                         <div class="flex gap-3 mt-1" v-if="getPdfUrl(selectedOrder) || getXmlUrl(selectedOrder)">
                             <a 
                                 v-if="getPdfUrl(selectedOrder)" 
-                                :href="getPdfUrl(selectedOrder)" 
-                                target="_blank" 
+                                href="#" 
                                 class="text-xs font-semibold text-red-600 no-underline"
+                                @click.prevent="printInvoice(selectedOrder)"
                             >
                                 <i class="pi pi-file-pdf mr-1"></i>Ver PDF
                             </a>
