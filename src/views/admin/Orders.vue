@@ -186,8 +186,25 @@ const updateOrderStatus = async () => {
 };
 
 // Imprimir / Descargar comprobante electrónico o ticket
+const getPdfUrl = (order) => {
+    return order?.pdf_url || order?.invoice?.pdf_url || null;
+};
+
+const getXmlUrl = (order) => {
+    return order?.xml_url || order?.invoice?.xml_url || null;
+};
+
 const printInvoice = async (order) => {
     if (!order) return;
+
+    // 1. Toma directamente la URL del JSON (order.pdf_url o order.invoice.pdf_url)
+    const pdfUrl = getPdfUrl(order);
+    if (pdfUrl) {
+        window.open(pdfUrl, '_blank');
+        return;
+    }
+
+    // 2. Respaldo si en el JSON pdf_url viene en null
     isPrinting.value = true;
     try {
         const response = await api.get(`/orders/${order.id}/pdf`, { responseType: 'blob' });
@@ -197,8 +214,8 @@ const printInvoice = async (order) => {
     } catch (err) {
         toast.add({
             severity: 'warn',
-            summary: 'Sin PDF disponible',
-            detail: 'Esta orden aún no tiene un comprobante PDF generado.',
+            summary: 'Sin comprobante PDF',
+            detail: 'Esta orden aún no tiene un PDF generado en el sistema.',
             life: 3500
         });
     } finally {
@@ -549,24 +566,25 @@ onMounted(() => {
                                 ({{ getInvoiceCorrelative(selectedOrder) }})
                             </span>
                         </span>
-                        <div class="flex gap-2 mt-1" v-if="selectedOrder.pdf_url || selectedOrder.xml_url">
+                        <div class="flex gap-3 mt-1" v-if="getPdfUrl(selectedOrder) || getXmlUrl(selectedOrder)">
                             <a 
-                                v-if="selectedOrder.pdf_url" 
-                                href="#" 
+                                v-if="getPdfUrl(selectedOrder)" 
+                                :href="getPdfUrl(selectedOrder)" 
+                                target="_blank" 
                                 class="text-xs font-semibold text-red-600 no-underline"
-                                @click.prevent="printInvoice(selectedOrder)"
                             >
                                 <i class="pi pi-file-pdf mr-1"></i>Ver PDF
                             </a>
                             <a 
-                                v-if="selectedOrder.xml_url" 
-                                :href="selectedOrder.xml_url" 
+                                v-if="getXmlUrl(selectedOrder)" 
+                                :href="getXmlUrl(selectedOrder)" 
                                 target="_blank" 
                                 class="text-xs font-semibold text-blue-600 no-underline"
                             >
-                                <i class="pi pi-code mr-1"></i>XML
+                                <i class="pi pi-code mr-1"></i>Ver XML
                             </a>
                         </div>
+                        <span v-else class="text-xs text-400 block mt-1">Sin archivos SUNAT adjuntos</span>
                     </div>
                 </div>
 
