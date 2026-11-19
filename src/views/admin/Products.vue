@@ -1109,17 +1109,15 @@ onMounted(() => {
             <!-- STOCKS INICIAL / ACTUAL Y MÍNIMO -->
             <div class="grid">
                 <div class="col-6 field mb-2">
-                    <label class="font-bold text-xs text-700 uppercase">
-                        {{ form.id ? 'Stock Actual (Solo lectura)' : 'Stock Inicial (Solo lectura)' }}
-                    </label>
+                    <label class="font-bold text-xs text-700 uppercase">Stock Actual</label>
                     <InputNumber
                         v-model="form.stock"
                         size="small"
                         :min="0"
-                        :disabled="!!form.id"
+                        disabled
                     />
-                    <small v-if="form.id" class="text-500 block mt-1" style="font-size: 11px;">
-                        Se actualiza desde Compras o Ajustes de Kardex.
+                    <small class="text-500 block mt-1" style="font-size: 11px;">
+                        Se gestiona desde Compras o Kardex.
                     </small>
                 </div>
                 <div class="col-6 field mb-2">
