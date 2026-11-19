@@ -211,7 +211,9 @@ const searchByBarcode = async () => {
         // Vista previa de imagen externa
         if (data.image_url && !selectedFile.value) {
             externalImageUrl.value = data.image_url;
-            imagePreview.value = data.image_preview || data.image_url;
+            if (data.image_preview) {
+                imagePreview.value = data.image_preview;
+            }
         }
 
         toast.add({
