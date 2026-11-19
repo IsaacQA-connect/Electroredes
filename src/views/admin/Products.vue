@@ -23,15 +23,16 @@ const brands = ref([]);
 
 // Lista base de Unidades de Medida
 const units = ref([
-    { label: 'Unidad (UND)', code: 'UND' },
-    { label: 'Kilogramos (KG)', code: 'KG' },
-    { label: 'Litros (LT)', code: 'LT' },
+    { label: 'Unidad - Bienes (NIU)', code: 'NIU' },
+    { label: 'Servicio (ZZ)', code: 'ZZ' },
     { label: 'Metros (MTR)', code: 'MTR' },
-    { label: 'Caja (CJ)', code: 'CJ' },
-    { label: 'Paquete (PAQ)', code: 'PAQ' },
-    { label: 'Docena (DOC)', code: 'DOC' },
-    { label: 'Galones (GLN)', code: 'GLN' },
-    { label: 'Servicio (SER)', code: 'SER' }
+    { label: 'Caja (BX)', code: 'BX' },
+    { label: 'Paquete (PK)', code: 'PK' },
+    { label: 'Kilogramos (KGM)', code: 'KGM' },
+    { label: 'Litros (LTR)', code: 'LTR' },
+    { label: 'Docena (DZN)', code: 'DZN' },
+    { label: 'Galones (GLL)', code: 'GLL' },
+    { label: 'Juego / Set (SET)', code: 'SET' }
 ]);
 
 // Filtros de tabla
@@ -79,7 +80,7 @@ const form = reactive({
     barcode: '',
     category_id: null,
     brand_id: null,
-    unit: 'UND',
+    unit: 'NIU',
     cost: 0,
     sale_price: 0,
     stock: 0,
@@ -388,7 +389,7 @@ const handleDropImage = (event) => {
 const resetForm = (preserveClassification = false) => {
     const keptCategory = preserveClassification ? form.category_id : null;
     const keptBrand = preserveClassification ? form.brand_id : null;
-    const keptUnit = preserveClassification ? form.unit : 'UND';
+    const keptUnit = preserveClassification ? form.unit : 'NIU';
 
     Object.assign(form, {
         id: null,
@@ -456,7 +457,7 @@ const editProduct = (prod) => {
         barcode: prod.barcode || '',
         category_id: prod.category_id || prod.category?.id,
         brand_id: prod.brand_id || prod.brand?.id || null,
-        unit: prod.unit || 'UND',
+        unit: prod.unit || 'NIU',
         cost,
         sale_price: sale,
         stock: Number(prod.stock) || 0,
@@ -575,7 +576,7 @@ const saveProduct = async (keepOpen = false) => {
             if (form.barcode?.trim()) formData.append('barcode', form.barcode.trim());
             formData.append('category_id', form.category_id);
             if (form.brand_id) formData.append('brand_id', form.brand_id);
-            formData.append('unit', form.unit || 'UND');
+            formData.append('unit', form.unit || 'NIU');
             formData.append('cost', Number(form.cost) || 0);
             formData.append('sale_price', Number(form.sale_price) || 0);
             formData.append('stock', Number(form.stock) || 0);
@@ -826,7 +827,7 @@ onMounted(() => {
                 <Column field="stock" header="Stock" sortable>
                     <template #body="slotProps">
                         <Tag
-                            :value="`${slotProps.data.stock} ${slotProps.data.unit || 'UND'}`"
+                            :value="`${slotProps.data.stock} ${slotProps.data.unit || 'NIU'}`"
                             :severity="Number(slotProps.data.stock) <= Number(slotProps.data.minimum_stock) ? 'danger' : 'success'"
                         />
                     </template>
@@ -1105,14 +1106,24 @@ onMounted(() => {
                 </span>
             </div>
 
-            <!-- STOCKS INICIAL Y MÍNIMO -->
+            <!-- STOCKS INICIAL / ACTUAL Y MÍNIMO -->
             <div class="grid">
                 <div class="col-6 field mb-2">
-                    <label class="font-bold text-xs text-700 uppercase">Stock Inicial</label>
-                    <InputNumber v-model="form.stock" size="small" :min="0" />
+                    <label class="font-bold text-xs text-700 uppercase">
+                        {{ form.id ? 'Stock Actual (Solo lectura)' : 'Stock Inicial' }}
+                    </label>
+                    <InputNumber
+                        v-model="form.stock"
+                        size="small"
+                        :min="0"
+                        :disabled="!!form.id"
+                    />
+                    <small v-if="form.id" class="text-500 block mt-1" style="font-size: 11px;">
+                        Se actualiza desde Compras o Ajustes de Kardex.
+                    </small>
                 </div>
                 <div class="col-6 field mb-2">
-                    <label class="font-bold text-xs text-700 uppercase">Stock Mínimo (Auto)</label>
+                    <label class="font-bold text-xs text-700 uppercase">Stock Mínimo</label>
                     <InputNumber
                         v-model="form.minimum_stock"
                         size="small"
