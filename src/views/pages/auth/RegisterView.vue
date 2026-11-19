@@ -240,9 +240,7 @@ const hasFormErrors = computed(() => Object.keys(errors.value).length > 0);
 const sanitizeNumericInput = (val) => val.replace(/\D/g, '');
 
 const onDocumentNumberInput = () => {
-  if (['DNI', 'RUC'].includes(form.document_type)) {
-    form.document_number = sanitizeNumericInput(form.document_number);
-  }
+  form.document_number = sanitizeNumericInput(form.document_number);
   validateDocumentNumber();
 };
 
@@ -263,7 +261,9 @@ const handleDocumentTypeChange = () => {
 };
 
 const validateDocumentNumber = () => {
-  if (form.document_type === 'DNI' && form.document_number.length !== 8) {
+  if (!form.document_number) {
+    errors.value.document_number = ['El número de documento es obligatorio.'];
+  } else if (form.document_type === 'DNI' && form.document_number.length !== 8) {
     errors.value.document_number = ['El DNI debe contener exactamente 8 dígitos.'];
   } else if (form.document_type === 'RUC' && form.document_number.length !== 11) {
     errors.value.document_number = ['El RUC debe contener exactamente 11 dígitos.'];
