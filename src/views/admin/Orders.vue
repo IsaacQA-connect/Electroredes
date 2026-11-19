@@ -26,9 +26,10 @@ const selectedOrder = ref(null);
 const newStatus = ref('');
 const isUpdating = ref(false);
 const isPrinting = ref(false);
+const cancellationReason = ref('');
+const reasonError = ref('');
 
 const statusOptions = [
-    { label: 'Pendiente', value: 'PENDING' },
     { label: 'Completado', value: 'COMPLETED' },
     { label: 'Cancelado', value: 'CANCELLED' }
 ];
@@ -178,23 +179,48 @@ const viewOrderDetails = async (order) => {
 // Abrir Modal de Cambio de Estado
 const openStatusDialog = (order) => {
     selectedOrder.value = order;
-    newStatus.value = order.status?.toUpperCase() || 'PENDING';
+    // Si la orden está en PENDING, lo dejamos vacío para obligar a elegir entre Completado o Cancelado
+    newStatus.value = ['COMPLETED', 'CANCELLED'].includes(order.status) ? order.status : null;
+    cancellationReason.value = order.cancellation_reason || '';
+    reasonError.value = '';
     statusDialog.value = true;
 };
 
 // Actualizar Estado en BD
 const updateOrderStatus = async () => {
-    if (!selectedOrder.value) return;
+    reasonError.value = '';
+
+    if (!newStatus.value) {
+        toast.add({ severity: 'warn', summary: 'Atención', detail: 'Selecciona un estado válido.', life: 3000 });
+        return;
+    }
+
+    if (newStatus.value === 'CANCELLED' && !cancellationReason.value.trim()) {
+        reasonError.value = 'Ingresa el motivo de la cancelación.';
+        return;
+    }
+
     isUpdating.value = true;
     try {
-        await api.put(`/orders/${selectedOrder.value.id}`, {
-            status: newStatus.value
+        const payload = {
+            status: newStatus.value,
+            cancellation_reason: newStatus.value === 'CANCELLED' ? cancellationReason.value.trim() : null
+        };
+
+        await api.patch(`/orders/${selectedOrder.value.id}/status`, payload);
+
+        toast.add({
+            severity: 'success',
+            summary: 'Estado actualizado',
+            detail: `La orden pasó a ${newStatus.value === 'COMPLETED' ? 'Completado' : 'Cancelado'}.`,
+            life: 3000
         });
-        toast.add({ severity: 'success', summary: 'Actualizado', detail: 'Estado del pedido modificado correctamente.', life: 3000 });
+
         statusDialog.value = false;
         fetchOrders();
-    } catch (err) {
-        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo actualizar el estado.', life: 4000 });
+    } catch (error) {
+        const msg = error.response?.data?.message || 'No se pudo actualizar el estado de la orden.';
+        toast.add({ severity: 'error', summary: 'Error', detail: msg, life: 4000 });
     } finally {
         isUpdating.value = false;
     }
@@ -769,14 +795,29 @@ onMounted(() => {
             :style="{ width: '90vw', maxWidth: '400px' }"
         >
             <div class="field my-3">
-                <label class="font-bold text-xs text-700 uppercase mb-2 block">Estado de la Orden</label>
+                <label class="font-bold text-xs text-700 uppercase mb-2 block">Estado de la Orden *</label>
                 <Select 
                     v-model="newStatus" 
                     :options="statusOptions" 
                     optionLabel="label" 
                     optionValue="value" 
+                    placeholder="Seleccionar estado"
                     class="w-full" 
+                    @change="reasonError = ''"
                 />
+            </div>
+
+            <div class="field mb-3" v-if="newStatus === 'CANCELLED'">
+                <label class="font-bold text-xs text-700 uppercase mb-2 block">Motivo de Cancelación *</label>
+                <InputText 
+                    v-model="cancellationReason" 
+                    placeholder="Ej: Cliente desistió de la compra, error en pedido..." 
+                    class="w-full"
+                    :invalid="!!reasonError"
+                    @input="reasonError = ''"
+                    @keydown.enter.prevent="updateOrderStatus"
+                />
+                <small class="text-red-500 text-xs block mt-1" v-if="reasonError">{{ reasonError }}</small>
             </div>
 
             <template #footer>
