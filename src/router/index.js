@@ -98,7 +98,7 @@ const router = createRouter({
             component: AppLayout,
             meta: { 
                 requiresAuth: true, 
-                requiresRole: ['ADMIN', 'ADMINISTRADOR', 'VENDEDOR'],
+                requiresRole: ['ADMIN', 'ADMINISTRADOR',],
                 hideNavbar: true
             },
             children: [
