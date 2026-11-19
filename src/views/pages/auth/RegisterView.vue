@@ -6,7 +6,11 @@
       <div class="text-center mb-4">
         <div class="text-900 text-2xl font-bold mb-2">Crear Cuenta Cliente</div>
         <span class="text-600 font-medium text-sm">¿Ya tienes cuenta en Electroredes?</span>
-        <router-link :to="{ name: 'login' }" class="font-bold no-underline ml-2 text-primary">
+        <router-link
+          :to="{ name: 'login' }"
+          class="font-bold no-underline ml-2"
+          style="color: #2D62A3;"
+        >
           Inicia sesión
         </router-link>
       </div>
@@ -16,7 +20,7 @@
       </Message>
 
       <form @submit.prevent="handleRegister">
-        <!-- Documento: Tipo y Número con Consulta Automática -->
+        <!-- Documento: Tipo y Número -->
         <div class="formgrid grid mb-3">
           <div class="col-12 md:col-5 mb-3 md:mb-0">
             <label for="document_type" class="block text-900 font-semibold mb-2 text-sm">
@@ -37,29 +41,17 @@
             <label for="document_number" class="block text-900 font-semibold mb-2 text-sm">
               N° Documento <span class="text-red-500">*</span>
             </label>
-            <div class="p-inputgroup">
-              <InputText 
-                id="document_number" 
-                v-model="form.document_number" 
-                type="text" 
-                :placeholder="documentPlaceholder" 
-                :maxlength="maxDocumentLength"
-                :disabled="searchingDoc"
-                class="w-full"
-                :class="{ 'p-invalid': errors.document_number }"
-                @input="onDocumentNumberInput"
-                @keyup.enter.prevent="lookupDocument"
-              />
-              <Button 
-                v-if="['DNI', 'RUC'].includes(form.document_type)"
-                type="button"
-                icon="pi pi-search" 
-                :loading="searchingDoc"
-                :disabled="!canLookupDocument"
-                v-tooltip.top="'Consultar en RENIEC / SUNAT'"
-                @click="lookupDocument"
-              />
-            </div>
+            <InputText 
+              id="document_number" 
+              v-model="form.document_number" 
+              type="text"
+              inputmode="numeric"
+              :placeholder="documentPlaceholder" 
+              :maxlength="maxDocumentLength"
+              class="w-full"
+              :class="{ 'p-invalid': errors.document_number }"
+              @input="onDocumentNumberInput"
+            />
             <small v-if="errors.document_number" class="p-error block mt-1 text-xs">
               {{ errors.document_number[0] }}
             </small>
@@ -110,7 +102,8 @@
             <InputText 
               id="phone" 
               v-model="form.phone" 
-              type="text" 
+              type="text"
+              inputmode="numeric"
               placeholder="987654321" 
               maxlength="9"
               class="w-full"
@@ -147,7 +140,11 @@
             <Password 
               id="password" 
               v-model="form.password" 
-              :toggleMask="true" 
+              :toggleMask="true"
+              promptLabel="Ingresa una contraseña"
+              weakLabel="Débil"
+              mediumLabel="Media"
+              strongLabel="Segura"
               placeholder="••••••••" 
               inputClass="w-full"
               class="w-full"
@@ -183,7 +180,7 @@
           type="submit" 
           label="Crear Cuenta" 
           icon="pi pi-user-plus" 
-          class="w-full font-bold" 
+          class="w-full font-bold brand-btn" 
           :loading="loading" 
         />
       </form>
@@ -207,7 +204,6 @@ const router = useRouter();
 const toast = useToast();
 
 const loading = ref(false);
-const searchingDoc = ref(false);
 const errors = ref({});
 
 const documentTypes = [
@@ -239,84 +235,15 @@ const documentPlaceholder = computed(() => {
   return 'N° de Carnet';
 });
 
-const canLookupDocument = computed(() => {
-  if (form.document_type === 'DNI') return form.document_number.length === 8;
-  if (form.document_type === 'RUC') return form.document_number.length === 11;
-  return false;
-});
-
 const hasFormErrors = computed(() => Object.keys(errors.value).length > 0);
 
 const sanitizeNumericInput = (val) => val.replace(/\D/g, '');
-
-// Consulta DNI / RUC al backend
-const lookupDocument = async () => {
-  if (!canLookupDocument.value || searchingDoc.value) return;
-
-  searchingDoc.value = true;
-  const endpoint = form.document_type === 'DNI'
-    ? `/lookup/dni/${form.document_number}`
-    : `/lookup/ruc/${form.document_number}`;
-
-  try {
-    const response = await api.get(endpoint);
-    const resData = response.data;
-
-    let fullName = resData.name || '';
-    let fiscalAddress = resData.address || '';
-
-    // Compatibilidad si el backend devuelve la respuesta cruda dentro de "data"
-    if (!fullName && resData.data) {
-      const raw = resData.data;
-      if (form.document_type === 'DNI') {
-        fullName = [raw.nombres, raw.apellidoPaterno, raw.apellidoMaterno]
-          .filter(Boolean)
-          .join(' ')
-          .trim();
-      } else if (form.document_type === 'RUC') {
-        fullName = raw.razonSocial || '';
-        fiscalAddress = raw.direccion || '';
-      }
-    }
-
-    if (fullName) {
-      form.name = fullName;
-      delete errors.value.name;
-    }
-
-    if (fiscalAddress && fiscalAddress !== '-') {
-      form.address = fiscalAddress;
-      delete errors.value.address;
-    }
-
-    toast.add({
-      severity: 'success',
-      summary: `${form.document_type} Encontrado`,
-      detail: fullName || 'Datos cargados correctamente.',
-      life: 2500
-    });
-  } catch (error) {
-    toast.add({
-      severity: 'warn',
-      summary: 'Sin resultados',
-      detail: error.response?.data?.message || `No se encontraron datos para el ${form.document_type}. Puedes ingresarlo manualmente.`,
-      life: 3500
-    });
-  } finally {
-    searchingDoc.value = false;
-  }
-};
 
 const onDocumentNumberInput = () => {
   if (['DNI', 'RUC'].includes(form.document_type)) {
     form.document_number = sanitizeNumericInput(form.document_number);
   }
   validateDocumentNumber();
-
-  // Disparo automático al completar los 8 dígitos (DNI) u 11 dígitos (RUC)
-  if (canLookupDocument.value) {
-    lookupDocument();
-  }
 };
 
 const onPhoneInput = () => {
@@ -437,5 +364,18 @@ const handleRegister = async () => {
 }
 .max-w-30rem {
   max-width: 32rem;
+}
+.brand-btn {
+  background-color: #2D62A3 !important;
+  border-color: #2D62A3 !important;
+}
+.brand-btn:hover {
+  background-color: #234e83 !important;
+  border-color: #234e83 !important;
+}
+:deep(.p-inputtext:focus),
+:deep(.p-dropdown.p-focus) {
+  border-color: #2D62A3 !important;
+  box-shadow: 0 0 0 1px #2D62A3 !important;
 }
 </style>
