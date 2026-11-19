@@ -1110,7 +1110,7 @@ onMounted(() => {
             <div class="grid">
                 <div class="col-6 field mb-2">
                     <label class="font-bold text-xs text-700 uppercase">
-                        {{ form.id ? 'Stock Actual (Solo lectura)' : 'Stock Inicial' }}
+                        {{ form.id ? 'Stock Actual (Solo lectura)' : 'Stock Inicial (Solo lectura)' }}
                     </label>
                     <InputNumber
                         v-model="form.stock"
