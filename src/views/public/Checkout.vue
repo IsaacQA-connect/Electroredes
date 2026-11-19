@@ -55,9 +55,9 @@ const transactionCode = ref('');
 
 const paymentOptions = [
     { label: 'Pago en Línea / Tarjeta (Pasarela)', value: 'ONLINE_PAYMENT' },
-    { label: 'Transferencia Bancaria / CCI', value: 'BANK_TRANSFER' },
-    { label: 'Yape / Plin', value: 'Yape/Plin' },
-    { label: 'Pago en Efectivo', value: 'CASH' }
+    //{ label: 'Transferencia Bancaria / CCI', value: 'BANK_TRANSFER' },
+    //{ label: 'Yape / Plin', value: 'Yape/Plin' },
+    //{ label: 'Pago en Efectivo', value: 'CASH' }
 ];
 
 // Totales y Reglas SUNAT
