@@ -26,7 +26,7 @@ const sunatStatus = ref(null);
 // Datos de la tienda física para recojo
 const STORE_PICKUP_INFO = {
     name: 'Tienda Física Electroredes',
-    address: 'Dirección de tu tienda física (Ej. Calle Principal 123)',
+    address: 'Asoc. 8 de diciembre Mz-H1 Lt-8 - Moquegua',
     schedule: 'Lunes a Sábado: 8:30 a.m. - 7:00 p.m.',
     instructions: 'Presenta tu número de pedido o DNI en caja/despacho al momento de recoger.'
 };
@@ -422,7 +422,7 @@ const processOrder = async () => {
                         <!-- Alerta Normativa SUNAT para Boleta > S/ 700 -->
                         <Message v-if="requiresDniBySunat" severity="warn" :closable="false" class="mb-3">
                             <div class="text-sm">
-                                <strong>Normativa SUNAT:</strong> Al superar los <strong>S/ 700.00</strong>, es obligatorio registrar tu número de <strong>DNI</strong> para emitir la Boleta de Venta Electrónica.
+                                <strong>Normativa SUNAT: Resolución de Superintendencia N.° 007-99/SUNAT (Reglamento de Comprobantes de Pago, Artículo 8°, numeral 3.10).</strong> Al superar los <strong>S/ 700.00</strong>, es obligatorio registrar tu número de <strong>DNI</strong> para emitir la Boleta de Venta Electrónica.
                             </div>
                         </Message>
 
