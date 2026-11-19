@@ -23,6 +23,14 @@ const searchingDoc = ref(false);
 const lastFetchedDoc = ref('');
 const sunatStatus = ref(null);
 
+// Datos de la tienda física para recojo
+const STORE_PICKUP_INFO = {
+    name: 'Tienda Física Electroredes',
+    address: 'Dirección de tu tienda física (Ej. Calle Principal 123)',
+    schedule: 'Lunes a Sábado: 8:30 a.m. - 7:00 p.m.',
+    instructions: 'Presenta tu número de pedido o DNI en caja/despacho al momento de recoger.'
+};
+
 // Respaldo de datos guardados en Mi Perfil para alternar entre Boleta y Factura sin perderlos
 const profileBackup = ref({
     dni: '',
@@ -33,7 +41,8 @@ const profileBackup = ref({
     phone: ''
 });
 
-// Formulario de Envío
+// Formulario de Entrega
+const deliveryType = ref('DELIVERY'); // 'DELIVERY' o 'PICKUP'
 const shippingAddress = ref('');
 const contactPhone = ref('');
 const deliveryNotes = ref('');
@@ -104,21 +113,21 @@ const loadProfileData = () => {
         invoiceType.value = 'BOLETA';
         documentNumber.value = docNum;
         customerName.value = fullName;
-        lastFetchedDoc.value = docNum; // Permite limpiar el nombre si edita el DNI
+        lastFetchedDoc.value = docNum;
     } else if (docType === 'RUC' && /^\d{11}$/.test(docNum)) {
         profileBackup.value.ruc = docNum;
         profileBackup.value.rucName = fullName;
         invoiceType.value = 'FACTURA';
         documentNumber.value = docNum;
         businessName.value = fullName;
-        lastFetchedDoc.value = docNum; // Permite limpiar la razón social si edita el RUC
+        lastFetchedDoc.value = docNum;
     }
 };
 
 onMounted(async () => {
-    loadProfileData();       // Carga inmediata desde caché si existe
-    await auth.fetchUser();  // Trae los datos frescos de GET /auth/me (users + customer)
-    loadProfileData();       // Actualiza los campos con lo último guardado en BD
+    loadProfileData();
+    await auth.fetchUser();
+    loadProfileData();
 });
 
 // Alternar entre Boleta y Factura restaurando el documento del perfil si existe
@@ -200,7 +209,7 @@ const lookupDocument = async () => {
         }
 
         if (isFactura) {
-            // Si el usuario no tiene dirección de entrega aún, autocompletar con la fiscal
+            // Autocompletar dirección fiscal si no tiene una registrada aún
             if (!shippingAddress.value.trim() && fiscalAddress && fiscalAddress !== '-') {
                 shippingAddress.value = fiscalAddress;
                 autoFilledAddress.value = true;
@@ -297,16 +306,19 @@ const processOrder = async () => {
         }
     }
 
-    // 3. Validar Dirección de Entrega
-    if (!shippingAddress.value.trim()) {
-        toast.add({ severity: 'warn', summary: 'Campo Requerido', detail: 'Ingresa la dirección de entrega.', life: 3500 });
+    // 3. Validar Dirección de Entrega (solo si elige Envío a Domicilio)
+    if (deliveryType.value === 'DELIVERY' && !shippingAddress.value.trim()) {
+        toast.add({ severity: 'warn', summary: 'Campo Requerido', detail: 'Ingresa la dirección de entrega o selecciona recojo en tienda.', life: 3500 });
         return;
     }
 
     loading.value = true;
 
     // 4. Construir Payload para la API
-    const notesParts = [`Dirección: ${shippingAddress.value.trim()}`];
+    const notesParts = deliveryType.value === 'PICKUP'
+        ? [`Modalidad: Recojo en Tienda Física (${STORE_PICKUP_INFO.address})`]
+        : [`Modalidad: Envío a Domicilio`, `Dirección: ${shippingAddress.value.trim()}`];
+
     if (contactPhone.value.trim()) notesParts.push(`Tel: ${contactPhone.value.trim()}`);
     if (deliveryNotes.value.trim()) notesParts.push(`Notas: ${deliveryNotes.value.trim()}`);
 
@@ -517,13 +529,81 @@ const processOrder = async () => {
                             Datos de Entrega
                         </h3>
 
+                        <!-- Selector de Modalidad: Envío a domicilio vs Recoger en tienda física -->
                         <div class="field mb-3">
+                            <label class="font-bold text-700 block mb-2">Modalidad de Entrega *</label>
+                            <div class="grid">
+                                <div class="col-12 sm:col-6">
+                                    <div
+                                        role="button"
+                                        tabindex="0"
+                                        class="p-3 border-round-lg cursor-pointer transition-all transition-duration-150 h-full flex align-items-center gap-3"
+                                        :style="deliveryType === 'DELIVERY'
+                                            ? 'border: 2px solid #2D62A3; background-color: #eff6ff;'
+                                            : 'border: 1px solid #d1d5db; background-color: #ffffff;'"
+                                        @click="deliveryType = 'DELIVERY'"
+                                        @keydown.enter.prevent="deliveryType = 'DELIVERY'"
+                                    >
+                                        <i
+                                            class="pi pi-truck text-2xl"
+                                            :style="{ color: deliveryType === 'DELIVERY' ? '#2D62A3' : '#6b7280' }"
+                                        ></i>
+                                        <div>
+                                            <div class="font-bold text-900 text-sm">Envío a Domicilio</div>
+                                            <small class="text-600 block">Entrega en tu dirección</small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-12 sm:col-6">
+                                    <div
+                                        role="button"
+                                        tabindex="0"
+                                        class="p-3 border-round-lg cursor-pointer transition-all transition-duration-150 h-full flex align-items-center gap-3"
+                                        :style="deliveryType === 'PICKUP'
+                                            ? 'border: 2px solid #2D62A3; background-color: #eff6ff;'
+                                            : 'border: 1px solid #d1d5db; background-color: #ffffff;'"
+                                        @click="deliveryType = 'PICKUP'"
+                                        @keydown.enter.prevent="deliveryType = 'PICKUP'"
+                                    >
+                                        <i
+                                            class="pi pi-shop text-2xl"
+                                            :style="{ color: deliveryType === 'PICKUP' ? '#2D62A3' : '#6b7280' }"
+                                        ></i>
+                                        <div>
+                                            <div class="font-bold text-900 text-sm">Recoger en Tienda</div>
+                                            <small class="text-600 block">Retiro directo en local</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Opción A: Dirección de Envío -->
+                        <div v-if="deliveryType === 'DELIVERY'" class="field mb-3">
                             <label class="font-bold text-700 block mb-2">Dirección de Envío *</label>
                             <InputText 
                                 v-model="shippingAddress" 
                                 placeholder="Ej: Av. Las Flores 123, Dpto 402, San Isidro" 
                                 class="w-full"
                             />
+                        </div>
+
+                        <!-- Opción B: Tarjeta Informativa de Tienda Física -->
+                        <div v-else class="p-3 border-round-lg bg-blue-50 border-1 border-blue-200 mb-3">
+                            <div class="flex align-items-start gap-2">
+                                <i class="pi pi-building text-lg mt-1" style="color: #2D62A3;"></i>
+                                <div class="text-sm text-900">
+                                    <div class="font-bold mb-1">{{ STORE_PICKUP_INFO.name }}</div>
+                                    <div class="text-700 mb-1">
+                                        <strong>Dirección:</strong> {{ STORE_PICKUP_INFO.address }}
+                                    </div>
+                                    <div class="text-700 mb-1">
+                                        <strong>Horario:</strong> {{ STORE_PICKUP_INFO.schedule }}
+                                    </div>
+                                    <small class="text-600 block">{{ STORE_PICKUP_INFO.instructions }}</small>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="field mb-3">
@@ -537,15 +617,22 @@ const processOrder = async () => {
                                 @keypress="onlyNumbers"
                                 @input="onPhoneInput"
                             />
+                            <small v-if="deliveryType === 'PICKUP'" class="text-500 block mt-1">
+                                Te avisaremos cuando tu pedido esté listo para recoger en tienda.
+                            </small>
                         </div>
 
                         <div class="field mb-3">
-                            <label class="font-bold text-700 block mb-2">Notas de Entrega (Opcional)</label>
+                            <label class="font-bold text-700 block mb-2">
+                                {{ deliveryType === 'PICKUP' ? 'Notas para el Recojo (Opcional)' : 'Notas de Entrega (Opcional)' }}
+                            </label>
                             <Textarea 
                                 v-model="deliveryNotes" 
                                 rows="2" 
                                 autoResize 
-                                placeholder="Referencia de la vivienda o instrucciones de recepción..." 
+                                :placeholder="deliveryType === 'PICKUP'
+                                    ? 'Ej: Recogerá otra persona (indicar nombre y DNI) o horario estimado...'
+                                    : 'Referencia de la vivienda o instrucciones de recepción...'" 
                                 class="w-full"
                             />
                         </div>
@@ -604,6 +691,12 @@ const processOrder = async () => {
                         </div>
 
                         <div class="border-top-1 surface-border pt-3">
+                            <div class="flex justify-content-between align-items-center mb-2 text-sm">
+                                <span class="text-600">Entrega</span>
+                                <span class="font-semibold text-900">
+                                    {{ deliveryType === 'PICKUP' ? 'Recojo en tienda física' : 'Envío a domicilio' }}
+                                </span>
+                            </div>
                             <div class="flex justify-content-between mb-2">
                                 <span class="text-600">Total a pagar</span>
                                 <span class="text-2xl font-bold" style="color: #2D62A3;">
