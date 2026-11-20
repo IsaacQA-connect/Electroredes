@@ -165,7 +165,6 @@ const messageInput = ref(null);
 const quickSuggestions = [
   '¿Qué productos tienen en stock?',
   'Horario y dirección de tienda',
-  'Cotizar por mayor'
 ];
 
 const getCurrentTime = () => {
