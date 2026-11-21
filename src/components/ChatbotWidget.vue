@@ -58,19 +58,64 @@
             <div class="message-bubble">
               <div class="message-text" v-html="formatMessage(msg.text)"></div>
 
-              <!-- Botón de derivación a WhatsApp -->
-              <a
-                v-if="msg.needsHuman"
-                :href="whatsappUrl(msg.lastUserQuery)"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="whatsapp-btn"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824z"/>
-                </svg>
-                Hablar con un asesor
-              </a>
+              <!-- Lista compacta de productos encontrados -->
+              <div v-if="msg.products && msg.products.length > 0" class="bot-products-list">
+                <div
+                  v-for="prod in msg.products"
+                  :key="prod.id"
+                  class="bot-product-card"
+                >
+                  <div class="prod-info">
+                    <span class="prod-name">{{ prod.name }}</span>
+                    <span class="prod-meta">
+                      S/ {{ Number(prod.sale_price).toFixed(2) }} • Stock: {{ prod.stock }}
+                    </span>
+                  </div>
+                  <button
+                    v-if="prod.stock > 0"
+                    type="button"
+                    class="prod-add-btn"
+                    title="Agregar al carrito"
+                    @click="handleAddProductToCart(prod)"
+                  >
+                    + Carrito
+                  </button>
+                </div>
+              </div>
+
+              <!-- Contenedor de Botones de Acción (PDF y WhatsApp) -->
+              <div v-if="msg.quotePdfUrl || msg.needsHuman || msg.whatsappUrl" class="action-buttons-group">
+                <!-- Botón Descargar Cotización PDF -->
+                <a
+                  v-if="msg.quotePdfUrl"
+                  :href="msg.quotePdfUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="pdf-btn"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="18" x2="12" y2="12" />
+                    <polyline points="9 15 12 18 15 15" />
+                  </svg>
+                  Descargar Cotización PDF
+                </a>
+
+                <!-- Botón de derivación / cierre por WhatsApp -->
+                <a
+                  v-if="msg.needsHuman || msg.whatsappUrl"
+                  :href="msg.whatsappUrl || buildFallbackWhatsappUrl(msg.lastUserQuery)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="whatsapp-btn"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824z"/>
+                  </svg>
+                  {{ msg.quotePdfUrl ? 'Cerrar cotización por WhatsApp' : 'Hablar con un asesor' }}
+                </a>
+              </div>
 
               <span class="message-time">{{ msg.time }}</span>
             </div>
@@ -106,7 +151,7 @@
             ref="messageInput"
             v-model="inputMessage"
             type="text"
-            placeholder="Consulta stock, precios o productos..."
+            placeholder="Consulta stock, precios o cotizaciones..."
             autocomplete="off"
           />
           <button
@@ -151,10 +196,14 @@
 <script setup>
 import axios from 'axios';
 import { nextTick, ref } from 'vue';
+// Importa tu store del carrito si usas Pinia (ajusta la ruta según tu proyecto):
+// import { useCartStore } from '@/stores/cart';
 
-// Configuración centralizada
 const API_URL = 'https://apielectroredes.soportecenter.com/api/v1/chatbot/query';
-const WHATSAPP_PHONE = '51900000000'; // Reemplazar por el número real de ventas
+const WHATSAPP_PHONE = '51933437116';
+
+// const cartStore = useCartStore();
+const emit = defineEmits(['add-to-cart']);
 
 const isOpen = ref(false);
 const loading = ref(false);
@@ -164,6 +213,7 @@ const messageInput = ref(null);
 
 const quickSuggestions = [
   '¿Qué productos tienen en stock?',
+  'Quiero cotizar materiales',
   'Horario y dirección de tienda',
 ];
 
@@ -178,6 +228,9 @@ const createInitialGreeting = () => ({
   sender: 'bot',
   text: '¡Hola! Soy **ElectriBOT**, tu asistente virtual de **ELECTRO REDES**.\n¿En qué producto, stock o cotización puedo ayudarte hoy?',
   needsHuman: false,
+  whatsappUrl: null,
+  quotePdfUrl: null,
+  products: [],
   time: getCurrentTime()
 });
 
@@ -211,7 +264,6 @@ const resetChat = () => {
   focusInput();
 };
 
-// Formatea negritas (**texto**) y saltos de línea de forma segura contra XSS
 const formatMessage = (rawText) => {
   if (!rawText) return '';
   const escaped = String(rawText)
@@ -227,6 +279,13 @@ const formatMessage = (rawText) => {
 const sendQuickReply = (text) => {
   inputMessage.value = text;
   sendMessage();
+};
+
+// Sincroniza producto con Pinia (cartStore) o emite evento al padre
+const handleAddProductToCart = (product, quantity = 1) => {
+  // Si usas Pinia, descomenta la línea correspondiente a tu método:
+  // cartStore.addItem({ id: product.product_id || product.id, name: product.name, sale_price: product.sale_price, image_path: product.image_path }, quantity);
+  emit('add-to-cart', { product, quantity });
 };
 
 const sendMessage = async () => {
@@ -245,7 +304,10 @@ const sendMessage = async () => {
   inputMessage.value = '';
   loading.value = true;
   scrollToBottom();
-  focusInput(); // Mantiene el foco inmediatamente tras dar Enter
+  focusInput();
+
+  // Obtener token Sanctum si el usuario está logueado
+  const token = localStorage.getItem('token') || localStorage.getItem('auth_token');
 
   try {
     const response = await axios.post(
@@ -254,15 +316,29 @@ const sendMessage = async () => {
       {
         headers: {
           'Content-Type': 'application/json',
-          Accept: 'application/json'
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
       }
     );
 
+    const data = response.data;
+
+    // 1. Si el bot ejecutó agregar_al_carrito, sincronizar automáticamente
+    if (data.cart_action && data.cart_action.type === 'ADD_TO_CART' && Array.isArray(data.cart_action.items)) {
+      data.cart_action.items.forEach((item) => {
+        handleAddProductToCart(item, item.quantity);
+      });
+    }
+
+    // 2. Renderizar respuesta con tarjetas, PDF y botón de WhatsApp
     messages.value.push({
       sender: 'bot',
-      text: response.data.reply,
-      needsHuman: Boolean(response.data.needs_human),
+      text: data.reply,
+      products: data.products || [],
+      quotePdfUrl: data.quote_pdf_url || null,
+      whatsappUrl: data.whatsapp_url || null,
+      needsHuman: Boolean(data.needs_human),
       lastUserQuery: text,
       time: getCurrentTime()
     });
@@ -270,6 +346,9 @@ const sendMessage = async () => {
     messages.value.push({
       sender: 'bot',
       text: 'Lo siento, tuve un inconveniente al consultar en este momento. Puedes escribirnos directamente por WhatsApp para atenderte al instante.',
+      products: [],
+      quotePdfUrl: null,
+      whatsappUrl: null,
       needsHuman: true,
       lastUserQuery: text,
       time: getCurrentTime()
@@ -277,13 +356,13 @@ const sendMessage = async () => {
   } finally {
     loading.value = false;
     scrollToBottom();
-    focusInput(); // Asegura el foco al recibir la respuesta
+    focusInput();
   }
 };
 
-const whatsappUrl = (query) => {
+const buildFallbackWhatsappUrl = (query) => {
   const encodedText = encodeURIComponent(
-    `Hola ELECTRO REDES, requiero atención personalizada sobre: ${query}`
+    `Hola ELECTRO REDES, requiero atención personalizada sobre: ${query || 'cotización'}`
   );
   return `https://wa.me/${WHATSAPP_PHONE}?text=${encodedText}`;
 };
@@ -348,7 +427,6 @@ const whatsappUrl = (query) => {
   overflow: hidden;
 }
 
-/* Animación de apertura */
 .chat-pop-enter-active,
 .chat-pop-leave-active {
   transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
@@ -489,7 +567,7 @@ const whatsappUrl = (query) => {
 }
 
 .message-bubble {
-  max-width: 80%;
+  max-width: 82%;
   padding: 10px 13px;
   font-size: 13px;
   line-height: 1.45;
@@ -515,9 +593,113 @@ const whatsappUrl = (query) => {
 .message-time {
   display: block;
   font-size: 10px;
-  margin-top: 4px;
+  margin-top: 5px;
   text-align: right;
   opacity: 0.7;
+}
+
+/* Tarjetas compactas de productos */
+.bot-products-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #E2E8F0;
+}
+
+.bot-product-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.prod-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.prod-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #0F172A;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prod-meta {
+  font-size: 10.5px;
+  color: #475569;
+}
+
+.prod-add-btn {
+  background: #1D53A0;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+}
+
+.prod-add-btn:hover {
+  background: #153E78;
+}
+
+/* Grupo de botones de acción (PDF y WhatsApp) */
+.action-buttons-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.pdf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background-color: #1D53A0;
+  color: #ffffff;
+  text-decoration: none;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  transition: background-color 0.15s ease;
+}
+
+.pdf-btn:hover {
+  background-color: #163F7A;
+}
+
+.whatsapp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background-color: #10B981;
+  color: #ffffff;
+  text-decoration: none;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  transition: background-color 0.15s ease;
+}
+
+.whatsapp-btn:hover {
+  background-color: #059669;
 }
 
 /* Sugerencias rápidas */
@@ -543,26 +725,6 @@ const whatsappUrl = (query) => {
 .chip-btn:hover {
   background: #EFF6FF;
   border-color: #1D53A0;
-}
-
-/* Botón WhatsApp */
-.whatsapp-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 9px;
-  padding: 7px 12px;
-  background-color: #10B981;
-  color: #ffffff;
-  text-decoration: none;
-  border-radius: 8px;
-  font-size: 11.5px;
-  font-weight: 600;
-  transition: background-color 0.15s ease;
-}
-
-.whatsapp-btn:hover {
-  background-color: #059669;
 }
 
 /* Indicador de escritura animado */
@@ -645,7 +807,6 @@ const whatsappUrl = (query) => {
   cursor: not-allowed;
 }
 
-/* Adaptación en pantallas móviles */
 @media (max-width: 480px) {
   .chatbot-container {
     bottom: 14px;

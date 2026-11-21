@@ -10,6 +10,11 @@ const route = useRoute();
 const shouldShowNavbar = computed(() => {
     return !route.matched.some(record => record.meta.hideNavbar);
 });
+
+const shouldShowChatbot = computed(() => {
+  const path = route.path.toLowerCase();
+  return !path.startsWith('/admin') && !path.startsWith('/dashboard') && !route.meta?.hideChatbot;
+});
 </script>
 
 <template>
@@ -22,5 +27,5 @@ const shouldShowNavbar = computed(() => {
       <router-view />
     </main>
   </div>
-  <ChatbotWidget />
+  <ChatbotWidget v-if="shouldShowChatbot" />
 </template>
