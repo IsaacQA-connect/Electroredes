@@ -75,10 +75,11 @@
                     v-if="prod.stock > 0"
                     type="button"
                     class="prod-add-btn"
+                    :style="addedProductId === (prod.product_id || prod.id) ? 'background-color: #10B981;' : ''"
                     title="Agregar al carrito"
                     @click="handleAddProductToCart(prod)"
                   >
-                    + Carrito
+                    {{ addedProductId === (prod.product_id || prod.id) ? '✓ Agregado' : '+ Carrito' }}
                   </button>
                 </div>
               </div>
@@ -197,12 +198,16 @@
 import axios from 'axios';
 import { nextTick, ref } from 'vue';
 // Importa tu store del carrito si usas Pinia (ajusta la ruta según tu proyecto):
+import { useCartStore } from '@/stores/cart';
+import { useToast } from 'primevue/usetoast';
 // import { useCartStore } from '@/stores/cart';
 
 const API_URL = 'https://apielectroredes.soportecenter.com/api/v1/chatbot/query';
 const WHATSAPP_PHONE = '51933437116';
 
-// const cartStore = useCartStore();
+const cart = useCartStore();
+const toast = useToast();
+const addedProductId = ref(null);
 const emit = defineEmits(['add-to-cart']);
 
 const isOpen = ref(false);
@@ -283,9 +288,36 @@ const sendQuickReply = (text) => {
 
 // Sincroniza producto con Pinia (cartStore) o emite evento al padre
 const handleAddProductToCart = (product, quantity = 1) => {
-  // Si usas Pinia, descomenta la línea correspondiente a tu método:
-  // cartStore.addItem({ id: product.product_id || product.id, name: product.name, sale_price: product.sale_price, image_path: product.image_path }, quantity);
-  emit('add-to-cart', { product, quantity });
+  const normalizedProduct = {
+    id: product.product_id || product.id,
+    code: product.code,
+    name: product.name,
+    sale_price: Number(product.sale_price),
+    price: Number(product.sale_price),
+    unit: product.unit,
+    image_path: product.image_path,
+    stock: product.stock,
+    brand: product.brand_name ? { name: product.brand_name } : product.brand,
+    category: product.category_name ? { name: product.category_name } : product.category,
+  };
+
+  for (let i = 0; i < quantity; i++) {
+    cart.addItem(normalizedProduct);
+  }
+
+  addedProductId.value = normalizedProduct.id;
+  setTimeout(() => {
+    if (addedProductId.value === normalizedProduct.id) {
+      addedProductId.value = null;
+    }
+  }, 1500);
+
+  toast.add({
+    severity: 'success',
+    summary: 'Agregado al carrito',
+    detail: `${quantity}x ${normalizedProduct.name}`,
+    life: 2500
+  });
 };
 
 const sendMessage = async () => {
